@@ -319,6 +319,25 @@ export interface InventoryBatch {
   stockStatus: 'normal' | 'low' | 'overstock' | 'expired' | 'expiring';
 }
 
+export type InventoryChangeType = 'inbound' | 'outbound' | 'transfer' | 'adjust';
+
+export interface InventoryChangeRecord {
+  id: string;
+  type: InventoryChangeType;
+  productId: string;
+  productName: string;
+  productSku: string;
+  locationId: string;
+  locationCode: string;
+  batchNo: string;
+  quantity: number;
+  balanceAfter: number;
+  orderNo: string;
+  operator: string;
+  operateTime: string;
+  remark?: string;
+}
+
 export interface AppState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;

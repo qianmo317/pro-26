@@ -17,6 +17,8 @@ import type {
   OutboundSplitData,
   LocationActivity,
   HeatmapDimension,
+  InventoryChangeRecord,
+  InventoryChangeType,
 } from '../types';
 import {
   mockSuppliers,
@@ -30,6 +32,7 @@ import {
   mockReportData,
   mockTransferOrders,
   mockLocationActivities,
+  mockInventoryChangeRecords,
 } from '../mock/data';
 
 export interface InventorySummary {
@@ -57,6 +60,7 @@ interface WarehouseState {
   reportData: ReportData;
   transferOrders: TransferOrder[];
   locationActivities: LocationActivity[];
+  inventoryChangeRecords: InventoryChangeRecord[];
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
@@ -87,6 +91,8 @@ interface WarehouseState {
   getTopActiveLocations: (dimension: HeatmapDimension, limit?: number) => LocationActivity[];
   getTopInactiveLocations: (dimension: HeatmapDimension, limit?: number) => LocationActivity[];
   getMaxActivityCount: (dimension: HeatmapDimension) => number;
+  getInventoryChangeByProduct: (productId: string, types?: InventoryChangeType[]) => InventoryChangeRecord[];
+  getInventoryChangeByLocation: (locationId: string, types?: InventoryChangeType[]) => InventoryChangeRecord[];
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -101,6 +107,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   reportData: mockReportData,
   transferOrders: mockTransferOrders,
   locationActivities: mockLocationActivities,
+  inventoryChangeRecords: mockInventoryChangeRecords,
 
   addSupplier: (supplier) =>
     set((state) => ({
@@ -707,5 +714,23 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     const state = get();
     const key = dimension === 'inbound' ? 'inboundCount' : dimension === 'outbound' ? 'outboundCount' : 'totalCount';
     return state.locationActivities.reduce((max, a) => Math.max(max, a[key]), 0);
+  },
+
+  getInventoryChangeByProduct: (productId, types) => {
+    const state = get();
+    const records = state.inventoryChangeRecords.filter((r) => r.productId === productId);
+    if (types && types.length > 0) {
+      return records.filter((r) => types.includes(r.type));
+    }
+    return records;
+  },
+
+  getInventoryChangeByLocation: (locationId, types) => {
+    const state = get();
+    const records = state.inventoryChangeRecords.filter((r) => r.locationId === locationId);
+    if (types && types.length > 0) {
+      return records.filter((r) => types.includes(r.type));
+    }
+    return records;
   },
 }));

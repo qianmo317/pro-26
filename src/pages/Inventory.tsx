@@ -1,17 +1,18 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Table, Input, Select, Card, Space, Button, Tag, Tabs, Message } from '@arco-design/web-react';
-import { IconSearch, IconRefresh, IconExclamation, IconInfoCircle, IconStorage, IconList } from '@arco-design/web-react/icon';
+import { IconSearch, IconRefresh, IconExclamation, IconInfoCircle, IconStorage, IconList, IconRight, IconDown } from '@arco-design/web-react/icon';
 import { useWarehouseStore, type InventorySummary } from '../store/warehouseStore';
 import { useSearchParams } from 'react-router-dom';
-import type { InventoryBatch, BatchTraceData } from '../types';
+import type { InventoryBatch, BatchTraceData, InventoryChangeRecord } from '../types';
 import BatchTraceModal from '../components/BatchTraceModal';
+import InventoryTimeline from '../components/InventoryTimeline';
 
 const { Option } = Select;
 const Search = Input.Search;
 const TabPane = Tabs.TabPane;
 
 export default function Inventory() {
-  const { products, getInventorySummary, getInventoryBatches, getBatchTraceData } = useWarehouseStore();
+  const { products, getInventorySummary, getInventoryBatches, getBatchTraceData, getInventoryChangeByProduct, getInventoryChangeByLocation } = useWarehouseStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchText, setSearchText] = useState('');
   const [filterProduct, setFilterProduct] = useState<string>('');
@@ -19,6 +20,10 @@ export default function Inventory() {
   const [viewMode, setViewMode] = useState<'summary' | 'batch'>('summary');
   const [traceModalVisible, setTraceModalVisible] = useState(false);
   const [traceData, setTraceData] = useState<BatchTraceData | null>(null);
+  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
+  const [timelineData, setTimelineData] = useState<InventoryChangeRecord[]>([]);
+  const [timelineTitle, setTimelineTitle] = useState('');
+  const [activeExpandKey, setActiveExpandKey] = useState<string>('');
 
   useEffect(() => {
     const status = searchParams.get('status');
@@ -63,6 +68,23 @@ export default function Inventory() {
     }
   };
 
+  const handleRowExpand = (record: InventorySummary | InventoryBatch, type: 'product' | 'location', rowKey: string, locationId?: string, locationCode?: string) => {
+    let records: InventoryChangeRecord[] = [];
+    let title = '';
+
+    if (type === 'product') {
+      records = getInventoryChangeByProduct(record.productId);
+      title = `${record.productName} (${record.productSku}) 库存变动时间线`;
+    } else if (type === 'location' && locationId) {
+      records = getInventoryChangeByLocation(locationId);
+      title = `库位 ${locationCode} 库存变动时间线`;
+    }
+
+    setTimelineData(records);
+    setTimelineTitle(title);
+    setActiveExpandKey(rowKey);
+  };
+
   const summaryColumns = [
     {
       title: '预警',
@@ -74,6 +96,30 @@ export default function Inventory() {
           return <IconInfoCircle style={{ color: '#ff7d00', fontSize: '18px' }} />;
         }
         return null;
+      },
+    },
+    {
+      title: '展开',
+      width: 60,
+      render: (_: unknown, record: InventorySummary) => {
+        const rowKey = record.productId;
+        const isExpanded = expandedRowKeys.includes(rowKey);
+        return (
+          <Button
+            type="text"
+            size="small"
+            icon={isExpanded ? <IconDown /> : <IconRight />}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isExpanded) {
+                setExpandedRowKeys(expandedRowKeys.filter(k => k !== rowKey));
+              } else {
+                setExpandedRowKeys([rowKey]);
+                handleRowExpand(record, 'product', rowKey);
+              }
+            }}
+          />
+        );
       },
     },
     {
@@ -141,6 +187,25 @@ export default function Inventory() {
     },
   ];
 
+  const handleLocationClick = (record: InventoryBatch, locationCode: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const location = record.locations.find(l => l.locationCode === locationCode);
+    if (location) {
+      const rowKey = `${record.productId}-${record.batchNo}`;
+      const isExpanded = expandedRowKeys.includes(rowKey);
+      const locationId = useWarehouseStore.getState().locations.find(l => l.code === locationCode)?.id || '';
+
+      if (isExpanded && activeExpandKey === `location-${rowKey}-${locationCode}`) {
+        setExpandedRowKeys([]);
+        setActiveExpandKey('');
+      } else {
+        setExpandedRowKeys([rowKey]);
+        handleRowExpand(record, 'location', rowKey, locationId, locationCode);
+        setActiveExpandKey(`location-${rowKey}-${locationCode}`);
+      }
+    }
+  };
+
   const batchColumns = [
     {
       title: '预警',
@@ -152,6 +217,32 @@ export default function Inventory() {
           return <IconInfoCircle style={{ color: '#ff7d00', fontSize: '18px' }} />;
         }
         return null;
+      },
+    },
+    {
+      title: '展开',
+      width: 60,
+      render: (_: unknown, record: InventoryBatch) => {
+        const rowKey = `${record.productId}-${record.batchNo}`;
+        const isExpanded = expandedRowKeys.includes(rowKey) && activeExpandKey === rowKey;
+        return (
+          <Button
+            type="text"
+            size="small"
+            icon={isExpanded ? <IconDown /> : <IconRight />}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isExpanded) {
+                setExpandedRowKeys([]);
+                setActiveExpandKey('');
+              } else {
+                setExpandedRowKeys([rowKey]);
+                handleRowExpand(record, 'product', rowKey);
+                setActiveExpandKey(rowKey);
+              }
+            }}
+          />
+        );
       },
     },
     {
@@ -254,26 +345,43 @@ export default function Inventory() {
       title: '存放库位',
       dataIndex: 'locations',
       width: 200,
-      render: (locations: Array<{ locationCode: string; quantity: number }>) => {
+      render: (locations: Array<{ locationCode: string; quantity: number }>, record: InventoryBatch) => {
         if (locations.length === 0) return '-';
+        const rowKey = `${record.productId}-${record.batchNo}`;
         if (locations.length <= 2) {
           return (
             <Space size={4} wrap>
-              {locations.map((loc) => (
-                <Tag key={loc.locationCode} color="gray">
-                  {loc.locationCode} ({loc.quantity})
-                </Tag>
-              ))}
+              {locations.map((loc) => {
+                const isActive = activeExpandKey === `location-${rowKey}-${loc.locationCode}`;
+                return (
+                  <Tag
+                    key={loc.locationCode}
+                    color={isActive ? 'arcoblue' : 'gray'}
+                    style={{ cursor: 'pointer' }}
+                    onClick={(e: React.MouseEvent) => handleLocationClick(record, loc.locationCode, e)}
+                  >
+                    {loc.locationCode} ({loc.quantity})
+                  </Tag>
+                );
+              })}
             </Space>
           );
         }
         return (
           <Space size={4} wrap>
-            {locations.slice(0, 2).map((loc) => (
-              <Tag key={loc.locationCode} color="gray">
-                {loc.locationCode} ({loc.quantity})
-              </Tag>
-            ))}
+            {locations.slice(0, 2).map((loc) => {
+              const isActive = activeExpandKey === `location-${rowKey}-${loc.locationCode}`;
+              return (
+                <Tag
+                  key={loc.locationCode}
+                  color={isActive ? 'arcoblue' : 'gray'}
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e: any) => handleLocationClick(record, loc.locationCode, e)}
+                >
+                  {loc.locationCode} ({loc.quantity})
+                </Tag>
+              );
+            })}
             <Tag color="gray">+{locations.length - 2}</Tag>
           </Space>
         );
@@ -314,6 +422,18 @@ export default function Inventory() {
     setFilterProduct('');
     setStatusFilter('all');
     setSearchParams({});
+    setExpandedRowKeys([]);
+    setActiveExpandKey('');
+    setTimelineData([]);
+    setTimelineTitle('');
+  };
+
+  const expandedRowRender = () => {
+    return (
+      <div style={{ padding: '16px 24px', background: '#f7f8fa', borderRadius: '4px' }}>
+        <InventoryTimeline records={timelineData} title={timelineTitle} />
+      </div>
+    );
   };
 
   return (
@@ -428,7 +548,10 @@ export default function Inventory() {
             columns={summaryColumns}
             data={filteredSummaryData}
             rowKey="productId"
-            rowClassName={rowClassName as any}
+            rowClassName={rowClassName}
+            expandedRowKeys={expandedRowKeys}
+            onExpandedRowsChange={(keys) => setExpandedRowKeys(keys as string[])}
+            expandedRowRender={expandedRowRender}
             pagination={{
               pageSize: 20,
               showTotal: true,
@@ -440,7 +563,10 @@ export default function Inventory() {
             columns={batchColumns}
             data={filteredBatchData}
             rowKey={(record) => `${record.productId}-${record.batchNo}`}
-            rowClassName={rowClassName as any}
+            rowClassName={rowClassName}
+            expandedRowKeys={expandedRowKeys}
+            onExpandedRowsChange={(keys) => setExpandedRowKeys(keys as string[])}
+            expandedRowRender={expandedRowRender}
             pagination={{
               pageSize: 20,
               showTotal: true,
@@ -452,7 +578,7 @@ export default function Inventory() {
 
       <div style={{ marginTop: '16px', padding: '12px 16px', background: '#f2f3f5', borderRadius: '4px' }}>
         <span style={{ color: '#666', fontSize: '13px' }}>
-          💡 提示：在「批次明细视图」中，点击 <Tag color="arcoblue">批次号</Tag> 或「追溯」按钮可查看该批次的完整流转记录
+          💡 提示：点击行首的展开按钮可查看商品的库存变动时间线；在「批次明细视图」中，点击<Tag color="gray">库位标签</Tag>可查看该库位的库存变动记录；点击 <Tag color="arcoblue">批次号</Tag> 或「追溯」按钮可查看该批次的完整流转记录
         </span>
       </div>
 

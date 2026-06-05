@@ -767,3 +767,171 @@ export const mockLocationActivities: LocationActivity[] = mockLocations.map((loc
     totalCount: inboundCount + outboundCount,
   };
 });
+
+import type { InventoryChangeRecord } from '../types';
+
+export const mockInventoryChangeRecords: InventoryChangeRecord[] = [];
+
+const generateInventoryChangeRecords = () => {
+  let recordId = 1;
+  const productBalances: Record<string, number> = {};
+  const locationBalances: Record<string, number> = {};
+
+  const operators = ['张三', '李四', '王五', '赵六', '孙七'];
+
+  mockInboundOrders
+    .filter((o) => o.status === 'completed')
+    .sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime())
+    .forEach((order) => {
+      order.items.forEach((item) => {
+        if (item.locationId && item.actualQuantity > 0) {
+          const product = getProductById(item.productId);
+          const location = getLocationById(item.locationId);
+          if (product && location) {
+            const key = `${item.productId}-${item.locationId}`;
+            productBalances[key] = (productBalances[key] || 0) + item.actualQuantity;
+            locationBalances[item.locationId] = (locationBalances[item.locationId] || 0) + item.actualQuantity;
+
+            mockInventoryChangeRecords.push({
+              id: String(recordId++),
+              type: 'inbound',
+              productId: item.productId,
+              productName: product.name,
+              productSku: product.sku,
+              locationId: item.locationId,
+              locationCode: location.code,
+              batchNo: item.batchNo,
+              quantity: item.actualQuantity,
+              balanceAfter: productBalances[key],
+              orderNo: order.orderNo,
+              operator: order.operator || operators[Math.floor(Math.random() * operators.length)],
+              operateTime: order.updateTime,
+              remark: `从 ${order.supplier} 入库`,
+            });
+          }
+        }
+      });
+    });
+
+  mockTransferOrders
+    .filter((o) => o.status === 'completed')
+    .sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime())
+    .forEach((order) => {
+      order.items.forEach((item) => {
+        const product = getProductById(item.productId);
+        if (product) {
+          const sourceKey = `${item.productId}-${item.sourceLocationId}`;
+          const targetKey = `${item.productId}-${item.targetLocationId}`;
+          productBalances[sourceKey] = (productBalances[sourceKey] || 0) - item.quantity;
+          productBalances[targetKey] = (productBalances[targetKey] || 0) + item.quantity;
+          locationBalances[item.sourceLocationId] = (locationBalances[item.sourceLocationId] || 0) - item.quantity;
+          locationBalances[item.targetLocationId] = (locationBalances[item.targetLocationId] || 0) + item.quantity;
+
+          mockInventoryChangeRecords.push({
+            id: String(recordId++),
+            type: 'transfer',
+            productId: item.productId,
+            productName: product.name,
+            productSku: product.sku,
+            locationId: item.sourceLocationId,
+            locationCode: item.sourceLocationCode,
+            batchNo: item.batchNo,
+            quantity: -item.quantity,
+            balanceAfter: productBalances[sourceKey],
+            orderNo: order.orderNo,
+            operator: order.operator || operators[Math.floor(Math.random() * operators.length)],
+            operateTime: order.updateTime,
+            remark: `调拨出库至 ${item.targetLocationCode}`,
+          });
+
+          mockInventoryChangeRecords.push({
+            id: String(recordId++),
+            type: 'transfer',
+            productId: item.productId,
+            productName: product.name,
+            productSku: product.sku,
+            locationId: item.targetLocationId,
+            locationCode: item.targetLocationCode,
+            batchNo: item.batchNo,
+            quantity: item.quantity,
+            balanceAfter: productBalances[targetKey],
+            orderNo: order.orderNo,
+            operator: order.operator || operators[Math.floor(Math.random() * operators.length)],
+            operateTime: order.updateTime,
+            remark: `调拨入库自 ${item.sourceLocationCode}`,
+          });
+        }
+      });
+    });
+
+  mockOutboundOrders
+    .filter((o) => o.status === 'completed')
+    .sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime())
+    .forEach((order) => {
+      order.items.forEach((item) => {
+        if (item.locationId && item.batchNo && item.actualQuantity > 0) {
+          const product = getProductById(item.productId);
+          const location = getLocationById(item.locationId);
+          if (product && location) {
+            const key = `${item.productId}-${item.locationId}`;
+            productBalances[key] = (productBalances[key] || 0) - item.actualQuantity;
+            locationBalances[item.locationId] = (locationBalances[item.locationId] || 0) - item.actualQuantity;
+
+            mockInventoryChangeRecords.push({
+              id: String(recordId++),
+              type: 'outbound',
+              productId: item.productId,
+              productName: product.name,
+              productSku: product.sku,
+              locationId: item.locationId,
+              locationCode: location.code,
+              batchNo: item.batchNo,
+              quantity: -item.actualQuantity,
+              balanceAfter: Math.max(0, productBalances[key]),
+              orderNo: order.orderNo,
+              operator: order.operator || operators[Math.floor(Math.random() * operators.length)],
+              operateTime: order.updateTime,
+              remark: `出库至 ${order.customer}`,
+            });
+          }
+        }
+      });
+    });
+
+  mockStocktakePlans
+    .filter((p) => p.status === 'in_progress' || p.status === 'completed')
+    .forEach((plan) => {
+      plan.items
+        .filter((item) => item.status === 'counted' && item.diffQuantity !== 0)
+        .forEach((item) => {
+          const product = getProductById(item.productId);
+          const location = getLocationById(item.locationId);
+          if (product && location) {
+            const key = `${item.productId}-${item.locationId}`;
+            productBalances[key] = (productBalances[key] || item.systemQuantity) + item.diffQuantity;
+            locationBalances[item.locationId] = (locationBalances[item.locationId] || item.systemQuantity) + item.diffQuantity;
+
+            mockInventoryChangeRecords.push({
+              id: String(recordId++),
+              type: 'adjust',
+              productId: item.productId,
+              productName: product.name,
+              productSku: product.sku,
+              locationId: item.locationId,
+              locationCode: location.code,
+              batchNo: item.batchNo,
+              quantity: item.diffQuantity,
+              balanceAfter: Math.max(0, productBalances[key]),
+              orderNo: plan.planNo,
+              operator: plan.operator || operators[Math.floor(Math.random() * operators.length)],
+              operateTime: plan.startTime || plan.createTime,
+              remark: `盘点调整: 系统${item.systemQuantity} → 实际${item.actualQuantity}`,
+            });
+          }
+        });
+    });
+
+  mockInventoryChangeRecords.sort((a, b) => new Date(b.operateTime).getTime() - new Date(a.operateTime).getTime());
+};
+
+generateInventoryChangeRecords();
