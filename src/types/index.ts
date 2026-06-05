@@ -62,6 +62,18 @@ export interface Location {
   current: number;
 }
 
+export interface LocationActivity {
+  locationId: string;
+  locationCode: string;
+  zone: string;
+  inboundCount: number;
+  outboundCount: number;
+  totalCount: number;
+}
+
+export type HeatmapMode = 'status' | 'heatmap';
+export type HeatmapDimension = 'inbound' | 'outbound' | 'total';
+
 export interface Inventory {
   id: string;
   productId: string;

@@ -1,17 +1,20 @@
-import { useState } from 'react';
-import { Card, Select, Tag, Modal, Table, Grid } from '@arco-design/web-react';
+import { useState, useMemo } from 'react';
+import { Card, Select, Tag, Modal, Table, Grid, Radio } from '@arco-design/web-react';
 import { useWarehouseStore } from '../store/warehouseStore';
-import type { Location } from '../types';
+import type { Location, HeatmapMode, HeatmapDimension } from '../types';
 
 const { Option } = Select;
+const { Group } = Radio;
 const Row = Grid.Row;
 const Col = Grid.Col;
 
 export default function LocationOverview() {
-  const { locations, inventory } = useWarehouseStore();
+  const { locations, inventory, getLocationActivity, getMaxActivityCount } = useWarehouseStore();
   const [selectedZone, setSelectedZone] = useState('全部');
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>('status');
+  const [heatmapDimension, setHeatmapDimension] = useState<HeatmapDimension>('total');
 
   const zones = ['全部', ...new Set(locations.map((l) => l.zone))];
 
@@ -19,6 +22,50 @@ export default function LocationOverview() {
     selectedZone === '全部'
       ? locations
       : locations.filter((l) => l.zone === selectedZone);
+
+  const maxActivity = useMemo(
+    () => getMaxActivityCount(heatmapDimension),
+    [heatmapDimension, getMaxActivityCount]
+  );
+
+  const getHeatmapColor = (loc: Location): React.CSSProperties => {
+    if (heatmapMode === 'status') {
+      return {};
+    }
+    const activity = getLocationActivity(loc.id);
+    if (!activity) {
+      return { background: '#f5f5f5', color: '#999' };
+    }
+    const count =
+      heatmapDimension === 'inbound'
+        ? activity.inboundCount
+        : heatmapDimension === 'outbound'
+        ? activity.outboundCount
+        : activity.totalCount;
+    const ratio = maxActivity > 0 ? count / maxActivity : 0;
+    const alpha = 0.2 + ratio * 0.7;
+    const baseColor =
+      heatmapDimension === 'inbound'
+        ? '255, 125, 0'
+        : heatmapDimension === 'outbound'
+        ? '39, 174, 96'
+        : '52, 152, 219';
+    return {
+      background: `rgba(${baseColor}, ${alpha})`,
+      color: ratio > 0.5 ? '#fff' : '#333',
+      border: `1px solid rgba(${baseColor}, ${alpha + 0.2})`,
+    };
+  };
+
+  const getActivityCount = (loc: Location) => {
+    const activity = getLocationActivity(loc.id);
+    if (!activity) return 0;
+    return heatmapDimension === 'inbound'
+      ? activity.inboundCount
+      : heatmapDimension === 'outbound'
+      ? activity.outboundCount
+      : activity.totalCount;
+  };
 
   const handleLocationClick = (loc: Location) => {
     setSelectedLocation(loc);
@@ -106,76 +153,114 @@ export default function LocationOverview() {
       <Card
         title="库位可视化"
         extra={
-          <Select
-            style={{ width: 120 }}
-            value={selectedZone}
-            onChange={setSelectedZone}
-          >
-            {zones.map((zone) => (
-              <Option key={zone} value={zone}>
-                {zone}
-              </Option>
-            ))}
-          </Select>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <Group value={heatmapMode} onChange={setHeatmapMode} type="button">
+              <Radio value="status">占用状态</Radio>
+              <Radio value="heatmap">热力图</Radio>
+            </Group>
+            <Select
+              style={{ width: 120 }}
+              value={selectedZone}
+              onChange={setSelectedZone}
+            >
+              {zones.map((zone) => (
+                <Option key={zone} value={zone}>
+                  {zone}
+                </Option>
+              ))}
+            </Select>
+          </div>
         }
         style={{ marginTop: '24px' }}
       >
-        <div style={{ marginBottom: '16px', display: 'flex', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '4px',
-                background: '#e0e0e0',
-              }}
-            />
-            <span style={{ fontSize: '12px', color: '#666' }}>空闲</span>
+        {heatmapMode === 'heatmap' && (
+          <div style={{ marginBottom: '16px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <Group value={heatmapDimension} onChange={setHeatmapDimension} type="button">
+              <Radio value="total">总频次</Radio>
+              <Radio value="inbound">入库</Radio>
+              <Radio value="outbound">出库</Radio>
+            </Group>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+              <span style={{ fontSize: '12px', color: '#666' }}>低</span>
+              <div
+                style={{
+                  width: '120px',
+                  height: '12px',
+                  borderRadius: '6px',
+                  background: `linear-gradient(to right, ${
+                    heatmapDimension === 'inbound'
+                      ? 'rgba(255, 125, 0, 0.2), rgba(255, 125, 0, 0.9)'
+                      : heatmapDimension === 'outbound'
+                      ? 'rgba(39, 174, 96, 0.2), rgba(39, 174, 96, 0.9)'
+                      : 'rgba(52, 152, 219, 0.2), rgba(52, 152, 219, 0.9)'
+                  })`,
+                }}
+              />
+              <span style={{ fontSize: '12px', color: '#666' }}>高</span>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '4px',
-                background: '#e3f2fd',
-              }}
-            />
-            <span style={{ fontSize: '12px', color: '#666' }}>正常</span>
+        )}
+        {heatmapMode === 'status' && (
+          <div style={{ marginBottom: '16px', display: 'flex', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '4px',
+                  background: '#e0e0e0',
+                }}
+              />
+              <span style={{ fontSize: '12px', color: '#666' }}>空闲</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '4px',
+                  background: '#e3f2fd',
+                }}
+              />
+              <span style={{ fontSize: '12px', color: '#666' }}>正常</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '4px',
+                  background: '#ffebee',
+                }}
+              />
+              <span style={{ fontSize: '12px', color: '#666' }}>已满</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '4px',
+                  background: '#ffecb3',
+                }}
+              />
+              <span style={{ fontSize: '12px', color: '#666' }}>锁定</span>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '4px',
-                background: '#ffebee',
-              }}
-            />
-            <span style={{ fontSize: '12px', color: '#666' }}>已满</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '4px',
-                background: '#ffecb3',
-              }}
-            />
-            <span style={{ fontSize: '12px', color: '#666' }}>锁定</span>
-          </div>
-        </div>
+        )}
 
         <div className="location-grid">
           {filteredLocations.map((loc) => (
             <div
               key={loc.id}
-              className={`location-cell ${loc.status}`}
+              className={`location-cell ${heatmapMode === 'status' ? loc.status : ''}`}
+              style={heatmapMode === 'heatmap' ? getHeatmapColor(loc) : undefined}
               onClick={() => handleLocationClick(loc)}
             >
               <div style={{ fontWeight: '500' }}>{loc.code}</div>
-              <div style={{ fontSize: '10px', marginTop: '2px' }}>{loc.current}%</div>
+              <div style={{ fontSize: '10px', marginTop: '2px' }}>
+                {heatmapMode === 'heatmap' ? `${getActivityCount(loc)}次` : `${loc.current}%`}
+              </div>
             </div>
           ))}
         </div>
@@ -240,6 +325,63 @@ export default function LocationOverview() {
                 <div style={{ fontWeight: '500' }}>{selectedLocation.current}%</div>
               </div>
             </div>
+
+            {(() => {
+              const activity = getLocationActivity(selectedLocation.id);
+              if (!activity) return null;
+              return (
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontWeight: '500', marginBottom: '12px' }}>近30天活跃度</div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '12px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        background: 'rgba(52, 152, 219, 0.1)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', color: '#666' }}>总频次</div>
+                      <div style={{ fontSize: '20px', fontWeight: '600', color: '#3498db' }}>
+                        {activity.totalCount}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        background: 'rgba(255, 125, 0, 0.1)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', color: '#666' }}>入库</div>
+                      <div style={{ fontSize: '20px', fontWeight: '600', color: '#ff7d00' }}>
+                        {activity.inboundCount}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        background: 'rgba(39, 174, 96, 0.1)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', color: '#666' }}>出库</div>
+                      <div style={{ fontSize: '20px', fontWeight: '600', color: '#27ae60' }}>
+                        {activity.outboundCount}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div style={{ marginBottom: '12px', fontWeight: '500' }}>库存商品</div>
             {getLocationInventory(selectedLocation.id).length > 0 ? (

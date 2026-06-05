@@ -15,6 +15,8 @@ import type {
   BatchTraceData,
   BatchTraceEvent,
   OutboundSplitData,
+  LocationActivity,
+  HeatmapDimension,
 } from '../types';
 import {
   mockSuppliers,
@@ -27,6 +29,7 @@ import {
   mockProducts,
   mockReportData,
   mockTransferOrders,
+  mockLocationActivities,
 } from '../mock/data';
 
 export interface InventorySummary {
@@ -53,6 +56,7 @@ interface WarehouseState {
   products: Product[];
   reportData: ReportData;
   transferOrders: TransferOrder[];
+  locationActivities: LocationActivity[];
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
@@ -79,6 +83,10 @@ interface WarehouseState {
   splitOutboundOrder: (splitData: OutboundSplitData) => OutboundOrder[];
   getChildOrders: (parentId: string) => OutboundOrder[];
   getParentOrder: (childId: string) => OutboundOrder | undefined;
+  getLocationActivity: (locationId: string) => LocationActivity | undefined;
+  getTopActiveLocations: (dimension: HeatmapDimension, limit?: number) => LocationActivity[];
+  getTopInactiveLocations: (dimension: HeatmapDimension, limit?: number) => LocationActivity[];
+  getMaxActivityCount: (dimension: HeatmapDimension) => number;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -92,6 +100,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   products: mockProducts,
   reportData: mockReportData,
   transferOrders: mockTransferOrders,
+  locationActivities: mockLocationActivities,
 
   addSupplier: (supplier) =>
     set((state) => ({
@@ -671,5 +680,32 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     const childOrder = state.outboundOrders.find((o) => o.id === childId);
     if (!childOrder || !childOrder.parentId) return undefined;
     return state.outboundOrders.find((o) => o.id === childOrder.parentId);
+  },
+
+  getLocationActivity: (locationId) => {
+    const state = get();
+    return state.locationActivities.find((a) => a.locationId === locationId);
+  },
+
+  getTopActiveLocations: (dimension, limit = 10) => {
+    const state = get();
+    const key = dimension === 'inbound' ? 'inboundCount' : dimension === 'outbound' ? 'outboundCount' : 'totalCount';
+    return [...state.locationActivities]
+      .sort((a, b) => b[key] - a[key])
+      .slice(0, limit);
+  },
+
+  getTopInactiveLocations: (dimension, limit = 10) => {
+    const state = get();
+    const key = dimension === 'inbound' ? 'inboundCount' : dimension === 'outbound' ? 'outboundCount' : 'totalCount';
+    return [...state.locationActivities]
+      .sort((a, b) => a[key] - b[key])
+      .slice(0, limit);
+  },
+
+  getMaxActivityCount: (dimension) => {
+    const state = get();
+    const key = dimension === 'inbound' ? 'inboundCount' : dimension === 'outbound' ? 'outboundCount' : 'totalCount';
+    return state.locationActivities.reduce((max, a) => Math.max(max, a[key]), 0);
   },
 }));

@@ -10,6 +10,7 @@ import type {
   StocktakePlan,
   ReportData,
   TransferOrder,
+  LocationActivity,
 } from '../types';
 
 export const mockUser: User = {
@@ -742,3 +743,27 @@ createTransferOrder(
   '2024-06-04 14:00:00',
   '2024-06-04 14:00:00'
 );
+
+export const mockLocationActivities: LocationActivity[] = mockLocations.map((loc) => {
+  const zoneActivityMultiplier: Record<string, number> = {
+    'A区': 1.5,
+    'B区': 1.2,
+    'C区': 0.8,
+    'D区': 0.5,
+  };
+  const multiplier = zoneActivityMultiplier[loc.zone] || 1;
+  const levelMultiplier = (5 - loc.level) * 0.3;
+  const baseActivity = Math.floor(Math.random() * 30) * multiplier * (1 + levelMultiplier);
+
+  const inboundCount = Math.floor(baseActivity * (0.4 + Math.random() * 0.3));
+  const outboundCount = Math.floor(baseActivity * (0.3 + Math.random() * 0.3));
+
+  return {
+    locationId: loc.id,
+    locationCode: loc.code,
+    zone: loc.zone,
+    inboundCount,
+    outboundCount,
+    totalCount: inboundCount + outboundCount,
+  };
+});

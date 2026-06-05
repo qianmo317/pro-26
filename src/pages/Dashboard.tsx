@@ -1,11 +1,14 @@
-import { Grid, Card, Table, Tag } from '@arco-design/web-react';
-import { IconImport, IconExport, IconStorage, IconPlus, IconExclamation, IconInfoCircle } from '@arco-design/web-react/icon';
+import { useState } from 'react';
+import { Grid, Card, Table, Tag, Radio } from '@arco-design/web-react';
+import { IconImport, IconExport, IconStorage, IconPlus, IconExclamation, IconInfoCircle, IconFire, IconMinus } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
+import type { HeatmapDimension } from '../types';
 
 const Row = Grid.Row;
 const Col = Grid.Col;
+const { Group } = Radio;
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -18,7 +21,11 @@ export default function Dashboard() {
     reportData,
     getLowStockCount,
     getOverstockCount,
+    getTopActiveLocations,
+    getTopInactiveLocations,
   } = useWarehouseStore();
+
+  const [rankDimension, setRankDimension] = useState<HeatmapDimension>('total');
 
   const lowStockCount = getLowStockCount();
   const overstockCount = getOverstockCount();
@@ -402,6 +409,191 @@ export default function Dashboard() {
               }}
               style={{ height: '280px' }}
             />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{ marginTop: '24px' }}>
+        <Col span={24}>
+          <Card
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span>库位活跃度排行榜</span>
+                <Group value={rankDimension} onChange={setRankDimension} type="button" size="small">
+                  <Radio value="total">总频次</Radio>
+                  <Radio value="inbound">入库</Radio>
+                  <Radio value="outbound">出库</Radio>
+                </Group>
+              </div>
+            }
+            className="chart-container"
+          >
+            <Row gutter={16}>
+              <Col span={12}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    background: 'linear-gradient(90deg, rgba(255, 125, 0, 0.1), transparent)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <IconFire style={{ fontSize: '20px', color: '#ff7d00' }} />
+                  <span style={{ fontWeight: '600', color: '#ff7d00' }}>最活跃库位 TOP10</span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  {getTopActiveLocations(rankDimension, 10).map((loc, index) => (
+                    <div
+                      key={loc.locationId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '10px 12px',
+                        background: index < 3 ? 'rgba(255, 125, 0, 0.05)' : '#fafafa',
+                        borderRadius: '8px',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 125, 0, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = index < 3 ? 'rgba(255, 125, 0, 0.05)' : '#fafafa';
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          background:
+                            index === 0
+                              ? 'linear-gradient(135deg, #ffd700, #ffb800)'
+                              : index === 1
+                              ? 'linear-gradient(135deg, #c0c0c0, #a0a0a0)'
+                              : index === 2
+                              ? 'linear-gradient(135deg, #cd7f32, #a0522d)'
+                              : '#e0e0e0',
+                          color: index < 3 ? '#fff' : '#666',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: '600',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {index + 1}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '500' }}>{loc.locationCode}</div>
+                        <div style={{ fontSize: '11px', color: '#999' }}>{loc.zone}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: '600', color: '#ff7d00', fontSize: '16px' }}>
+                          {rankDimension === 'inbound'
+                            ? loc.inboundCount
+                            : rankDimension === 'outbound'
+                            ? loc.outboundCount
+                            : loc.totalCount}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#999' }}>次</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Col>
+              <Col span={12}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    background: 'linear-gradient(90deg, rgba(52, 152, 219, 0.1), transparent)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <IconMinus style={{ fontSize: '20px', color: '#3498db' }} />
+                  <span style={{ fontWeight: '600', color: '#3498db' }}>最冷门库位 TOP10</span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  {getTopInactiveLocations(rankDimension, 10).map((loc, index) => (
+                    <div
+                      key={loc.locationId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '10px 12px',
+                        background: index < 3 ? 'rgba(52, 152, 219, 0.05)' : '#fafafa',
+                        borderRadius: '8px',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(52, 152, 219, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = index < 3 ? 'rgba(52, 152, 219, 0.05)' : '#fafafa';
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          background:
+                            index === 0
+                              ? 'linear-gradient(135deg, #3498db, #2980b9)'
+                              : index === 1
+                              ? 'linear-gradient(135deg, #5dade2, #3498db)'
+                              : index === 2
+                              ? 'linear-gradient(135deg, #85c1e9, #5dade2)'
+                              : '#e0e0e0',
+                          color: index < 3 ? '#fff' : '#666',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: '600',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {index + 1}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '500' }}>{loc.locationCode}</div>
+                        <div style={{ fontSize: '11px', color: '#999' }}>{loc.zone}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: '600', color: '#3498db', fontSize: '16px' }}>
+                          {rankDimension === 'inbound'
+                            ? loc.inboundCount
+                            : rankDimension === 'outbound'
+                            ? loc.outboundCount
+                            : loc.totalCount}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#999' }}>次</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>

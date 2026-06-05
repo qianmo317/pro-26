@@ -658,19 +658,19 @@ export default function Outbound() {
                   label: '操作人',
                   value: selectedOrder.operator || '-',
                 },
-                selectedOrder.parentId ? {
+                ...(selectedOrder.parentId ? [{
                   label: '关联父单',
                   value: outboundOrders.find(o => o.id === selectedOrder.parentId)?.orderNo || '-',
-                } : null,
-                selectedOrder.splitTime ? {
+                }] : []),
+                ...(selectedOrder.splitTime ? [{
                   label: '拆分时间',
                   value: selectedOrder.splitTime,
-                } : null,
-                selectedOrder.remark ? {
+                }] : []),
+                ...(selectedOrder.remark ? [{
                   label: '备注',
                   value: selectedOrder.remark,
-                } : null,
-              ].filter(Boolean)}
+                }] : []),
+              ]}
             />
 
             <Divider />
