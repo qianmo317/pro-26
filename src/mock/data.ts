@@ -1,6 +1,7 @@
 import type {
   User,
   Supplier,
+  Customer,
   Product,
   Location,
   Inventory,
@@ -78,6 +79,69 @@ export const mockSuppliers: Supplier[] = [
     creditRating: 'D',
     createTime: '2024-04-18 16:45:00',
     updateTime: '2024-05-01 08:00:00',
+  },
+];
+
+export const mockCustomers: Customer[] = [
+  {
+    id: '1',
+    code: 'CUS001',
+    companyName: '北京机电设备有限公司',
+    shippingAddress: '北京市海淀区中关村大街1号',
+    contact: '王经理',
+    phone: '13900139001',
+    paymentTerms: 30,
+    status: 'active',
+    createTime: '2024-01-10 09:00:00',
+    updateTime: '2024-01-10 09:00:00',
+  },
+  {
+    id: '2',
+    code: 'CUS002',
+    companyName: '上海自动化科技公司',
+    shippingAddress: '上海市浦东新区张江高科技园区博云路2号',
+    contact: '李工',
+    phone: '13900139002',
+    paymentTerms: 45,
+    status: 'active',
+    createTime: '2024-02-15 10:30:00',
+    updateTime: '2024-02-15 10:30:00',
+  },
+  {
+    id: '3',
+    code: 'CUS003',
+    companyName: '广州贸易有限公司',
+    shippingAddress: '广州市天河区珠江新城华夏路8号',
+    contact: '张总',
+    phone: '13900139003',
+    paymentTerms: 60,
+    status: 'active',
+    createTime: '2024-03-05 14:00:00',
+    updateTime: '2024-03-05 14:00:00',
+  },
+  {
+    id: '4',
+    code: 'CUS004',
+    companyName: '深圳电子制造有限公司',
+    shippingAddress: '深圳市宝安区新安街道创业一路1000号',
+    contact: '赵经理',
+    phone: '13900139004',
+    paymentTerms: 30,
+    status: 'active',
+    createTime: '2024-03-20 11:20:00',
+    updateTime: '2024-03-20 11:20:00',
+  },
+  {
+    id: '5',
+    code: 'CUS005',
+    companyName: '杭州机械加工厂',
+    shippingAddress: '杭州市萧山区经济技术开发区桥南区块',
+    contact: '孙厂长',
+    phone: '13900139005',
+    paymentTerms: 90,
+    status: 'inactive',
+    createTime: '2024-04-01 08:30:00',
+    updateTime: '2024-05-10 09:00:00',
   },
 ];
 
@@ -350,8 +414,10 @@ createInboundOrder(
 
 export const mockOutboundOrders: OutboundOrder[] = [];
 
-const createOutboundOrder = (
-  customer: string,
+const getCustomerById = (id: string) => mockCustomers.find((c) => c.id === id);
+
+const createOutboundOrderWithCustomer = (
+  customerId: string,
   status: 'pending' | 'in_progress' | 'completed',
   items: Array<{
     productId: string;
@@ -364,10 +430,15 @@ const createOutboundOrder = (
   updateTime: string,
   operator?: string
 ) => {
+  const customer = getCustomerById(customerId);
   const order: OutboundOrder = {
     id: String(mockOutboundOrders.length + 1),
     orderNo: generateOrderNo(),
-    customer,
+    customerId: customerId,
+    customer: customer?.companyName || '',
+    shippingAddress: customer?.shippingAddress,
+    contact: customer?.contact,
+    phone: customer?.phone,
     status,
     items: items.map((item, idx) => {
       const product = getProductById(item.productId);
@@ -401,16 +472,16 @@ const createOutboundOrder = (
   return order;
 };
 
-createOutboundOrder(
-  '客户X',
+createOutboundOrderWithCustomer(
+  '1',
   'pending',
   [{ productId: '1', planQuantity: 30, actualQuantity: 0 }],
   '2024-06-03 11:00:00',
   '2024-06-03 11:00:00'
 );
 
-createOutboundOrder(
-  '客户Y',
+createOutboundOrderWithCustomer(
+  '2',
   'completed',
   [
     {
@@ -426,8 +497,8 @@ createOutboundOrder(
   '王五'
 );
 
-createOutboundOrder(
-  '客户Z',
+createOutboundOrderWithCustomer(
+  '3',
   'completed',
   [
     {
@@ -443,8 +514,8 @@ createOutboundOrder(
   '赵六'
 );
 
-createOutboundOrder(
-  '客户W',
+createOutboundOrderWithCustomer(
+  '4',
   'in_progress',
   [
     {

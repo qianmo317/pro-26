@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   Supplier,
+  Customer,
   Location,
   Inventory,
   InboundOrder,
@@ -8,9 +9,11 @@ import type {
   StocktakePlan,
   Product,
   ReportData,
+  CustomerStats,
 } from '../types';
 import {
   mockSuppliers,
+  mockCustomers,
   mockLocations,
   mockInventory,
   mockInboundOrders,
@@ -22,6 +25,7 @@ import {
 
 interface WarehouseState {
   suppliers: Supplier[];
+  customers: Customer[];
   locations: Location[];
   inventory: Inventory[];
   inboundOrders: InboundOrder[];
@@ -32,6 +36,10 @@ interface WarehouseState {
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
+  addCustomer: (customer: Customer) => void;
+  updateCustomer: (id: string, customer: Partial<Customer>) => void;
+  deleteCustomer: (id: string) => void;
+  getCustomerStats: (customerId: string) => CustomerStats;
   addInboundOrder: (order: InboundOrder) => void;
   updateInboundOrder: (id: string, order: Partial<InboundOrder>) => void;
   addOutboundOrder: (order: OutboundOrder) => void;
@@ -40,8 +48,9 @@ interface WarehouseState {
   completeStocktake: (planId: string) => void;
 }
 
-export const useWarehouseStore = create<WarehouseState>((set) => ({
+export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   suppliers: mockSuppliers,
+  customers: mockCustomers,
   locations: mockLocations,
   inventory: mockInventory,
   inboundOrders: mockInboundOrders,
@@ -66,6 +75,51 @@ export const useWarehouseStore = create<WarehouseState>((set) => ({
     set((state) => ({
       suppliers: state.suppliers.filter((s) => s.id !== id),
     })),
+
+  addCustomer: (customer) =>
+    set((state) => ({
+      customers: [...state.customers, customer],
+    })),
+
+  updateCustomer: (id, customer) =>
+    set((state) => ({
+      customers: state.customers.map((c) =>
+        c.id === id ? { ...c, ...customer, updateTime: new Date().toLocaleString() } : c
+      ),
+    })),
+
+  deleteCustomer: (id) =>
+    set((state) => ({
+      customers: state.customers.filter((c) => c.id !== id),
+    })),
+
+  getCustomerStats: (customerId) => {
+    const state = get();
+    const customerOrders = state.outboundOrders.filter(
+      (o) => o.customerId === customerId && o.status === 'completed'
+    );
+
+    const totalAmount = customerOrders.reduce((sum, order) => {
+      const orderAmount = order.items.reduce((s, item) => {
+        const product = state.products.find((p) => p.id === item.productId);
+        return s + (product?.price || 0) * item.actualQuantity;
+      }, 0);
+      return sum + orderAmount;
+    }, 0);
+
+    const lastOutboundTime =
+      customerOrders.length > 0
+        ? customerOrders.sort(
+            (a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime()
+          )[0].createTime
+        : '-';
+
+    return {
+      customerId,
+      totalOutboundAmount: totalAmount,
+      lastOutboundTime,
+    };
+  },
 
   addInboundOrder: (order) =>
     set((state) => ({

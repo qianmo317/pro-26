@@ -19,6 +19,25 @@ export interface Supplier {
   updateTime: string;
 }
 
+export interface Customer {
+  id: string;
+  code: string;
+  companyName: string;
+  shippingAddress: string;
+  contact: string;
+  phone: string;
+  paymentTerms: number;
+  status: 'active' | 'inactive';
+  createTime: string;
+  updateTime: string;
+}
+
+export interface CustomerStats {
+  customerId: string;
+  totalOutboundAmount: number;
+  lastOutboundTime: string;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -85,7 +104,11 @@ export interface InboundItem {
 export interface OutboundOrder {
   id: string;
   orderNo: string;
+  customerId?: string;
   customer: string;
+  shippingAddress?: string;
+  contact?: string;
+  phone?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   items: OutboundItem[];
   createTime: string;

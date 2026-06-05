@@ -11,10 +11,11 @@ import {
   Tag,
   Tabs,
 } from '@arco-design/web-react';
-import { IconPlus, IconEye } from '@arco-design/web-react/icon';
+import { IconPlus, IconEye, IconUserAdd } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { toast } from '../components/Toast';
 import type { OutboundOrder, OutboundItem } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 const FormItem = Form.Item;
 const TabPane = Tabs.TabPane;
@@ -26,8 +27,34 @@ export default function Outbound() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
   const [form] = Form.useForm();
-  const { outboundOrders, products, addOutboundOrder, updateOutboundOrder } =
+  const navigate = useNavigate();
+  const { outboundOrders, products, customers, addOutboundOrder, updateOutboundOrder } =
     useWarehouseStore();
+
+  const activeCustomers = customers.filter((c) => c.status === 'active');
+
+  const handleCustomerChange = (customerId: string) => {
+    const customer = customers.find((c) => c.id === customerId);
+    if (customer) {
+      form.setFieldsValue({
+        customerName: customer.companyName,
+        shippingAddress: customer.shippingAddress,
+        contact: customer.contact,
+        phone: customer.phone,
+      });
+    }
+  };
+
+  interface OutboundFormValues {
+    customerId: string;
+    customerName: string;
+    shippingAddress: string;
+    contact: string;
+    phone: string;
+    productId: string;
+    quantity: number;
+    remark?: string;
+  }
 
   const columns = [
     {
@@ -74,7 +101,7 @@ export default function Outbound() {
     {
       title: '操作',
       width: 180,
-      render: (_: any, record: OutboundOrder) => (
+      render: (_: unknown, record: OutboundOrder) => (
         <Space>
           <Button
             type="text"
@@ -122,11 +149,16 @@ export default function Outbound() {
     toast.success('出库完成');
   };
 
-  const handleSubmit = (values: any) => {
+  const handleSubmit = (values: OutboundFormValues) => {
+    const customer = customers.find((c) => c.id === values.customerId);
     const newOrder: OutboundOrder = {
       id: String(Date.now()),
       orderNo: `OUT${Date.now()}`,
-      customer: values.customer,
+      customerId: values.customerId,
+      customer: customer?.companyName || values.customerName,
+      shippingAddress: values.shippingAddress,
+      contact: values.contact,
+      phone: values.phone,
       status: 'pending',
       items: [
         {
@@ -190,6 +222,14 @@ export default function Outbound() {
             新建出库单
           </Button>
         </div>
+        <div>
+          <Button
+            icon={<IconUserAdd />}
+            onClick={() => navigate('/customer')}
+          >
+            客户档案
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultActiveTab="all">
@@ -224,24 +264,70 @@ export default function Outbound() {
         visible={modalVisible}
         onOk={() => form.submit()}
         onCancel={() => setModalVisible(false)}
-        style={{ width: 600 }}
+        style={{ width: 650 }}
       >
         <Form form={form} layout="vertical" onSubmit={handleSubmit}>
-          <FormItem label="客户名称" field="customer" rules={[{ required: true }]}>
-            <Input placeholder="请输入客户名称" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <FormItem
+              label="选择客户"
+              field="customerId"
+              rules={[{ required: true, message: '请选择客户' }]}
+            >
+              <Select
+                placeholder="请从客户档案中选择"
+                onChange={handleCustomerChange}
+                showSearch
+              >
+                {activeCustomers.map((c) => (
+                  <Option key={c.id} value={c.id}>
+                    {c.companyName} ({c.code})
+                  </Option>
+                ))}
+              </Select>
+            </FormItem>
+            <FormItem
+              label="客户名称"
+              field="customerName"
+              rules={[{ required: true, message: '请输入客户名称' }]}
+            >
+              <Input placeholder="选择客户后自动填充" />
+            </FormItem>
+            <FormItem
+              label="联系人"
+              field="contact"
+              rules={[{ required: true, message: '请输入联系人' }]}
+            >
+              <Input placeholder="选择客户后自动填充" />
+            </FormItem>
+            <FormItem
+              label="联系电话"
+              field="phone"
+              rules={[{ required: true, message: '请输入联系电话' }]}
+            >
+              <Input placeholder="选择客户后自动填充" />
+            </FormItem>
+          </div>
+          <FormItem
+            label="收货地址"
+            field="shippingAddress"
+            rules={[{ required: true, message: '请输入收货地址' }]}
+          >
+            <Input placeholder="选择客户后自动填充" />
           </FormItem>
-          <FormItem label="商品" field="productId" rules={[{ required: true }]}>
-            <Select placeholder="请选择商品">
-              {products.map((p) => (
-                <Option key={p.id} value={p.id}>
-                  {p.name} ({p.sku})
-                </Option>
-              ))}
-            </Select>
-          </FormItem>
-          <FormItem label="出库数量" field="quantity" rules={[{ required: true }]}>
-            <InputNumber style={{ width: '100%' }} min={1} />
-          </FormItem>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <FormItem label="商品" field="productId" rules={[{ required: true, message: '请选择商品' }]}>
+              <Select placeholder="请选择商品">
+                {products.map((p) => (
+                  <Option key={p.id} value={p.id}>
+                    {p.name} ({p.sku})
+                  </Option>
+                ))}
+              </Select>
+            </FormItem>
+            <FormItem label="出库数量" field="quantity" rules={[{ required: true, message: '请输入出库数量' }]}>
+              <InputNumber style={{ width: '100%' }} min={1} />
+            </FormItem>
+          </div>
           <FormItem label="备注" field="remark">
             <TextArea placeholder="请输入备注信息" />
           </FormItem>
@@ -273,6 +359,18 @@ export default function Outbound() {
               <div>
                 <div style={{ color: '#666', fontSize: '12px' }}>客户</div>
                 <div style={{ fontWeight: '500' }}>{selectedOrder.customer}</div>
+              </div>
+              <div>
+                <div style={{ color: '#666', fontSize: '12px' }}>联系人</div>
+                <div style={{ fontWeight: '500' }}>{selectedOrder.contact || '-'}</div>
+              </div>
+              <div>
+                <div style={{ color: '#666', fontSize: '12px' }}>联系电话</div>
+                <div style={{ fontWeight: '500' }}>{selectedOrder.phone || '-'}</div>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ color: '#666', fontSize: '12px' }}>收货地址</div>
+                <div style={{ fontWeight: '500' }}>{selectedOrder.shippingAddress || '-'}</div>
               </div>
               <div>
                 <div style={{ color: '#666', fontSize: '12px' }}>状态</div>
