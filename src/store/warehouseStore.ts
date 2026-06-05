@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  Supplier,
   Location,
   Inventory,
   InboundOrder,
@@ -9,6 +10,7 @@ import type {
   ReportData,
 } from '../types';
 import {
+  mockSuppliers,
   mockLocations,
   mockInventory,
   mockInboundOrders,
@@ -19,6 +21,7 @@ import {
 } from '../mock/data';
 
 interface WarehouseState {
+  suppliers: Supplier[];
   locations: Location[];
   inventory: Inventory[];
   inboundOrders: InboundOrder[];
@@ -26,6 +29,9 @@ interface WarehouseState {
   stocktakePlans: StocktakePlan[];
   products: Product[];
   reportData: ReportData;
+  addSupplier: (supplier: Supplier) => void;
+  updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
+  deleteSupplier: (id: string) => void;
   addInboundOrder: (order: InboundOrder) => void;
   updateInboundOrder: (id: string, order: Partial<InboundOrder>) => void;
   addOutboundOrder: (order: OutboundOrder) => void;
@@ -35,6 +41,7 @@ interface WarehouseState {
 }
 
 export const useWarehouseStore = create<WarehouseState>((set) => ({
+  suppliers: mockSuppliers,
   locations: mockLocations,
   inventory: mockInventory,
   inboundOrders: mockInboundOrders,
@@ -42,6 +49,23 @@ export const useWarehouseStore = create<WarehouseState>((set) => ({
   stocktakePlans: mockStocktakePlans,
   products: mockProducts,
   reportData: mockReportData,
+
+  addSupplier: (supplier) =>
+    set((state) => ({
+      suppliers: [...state.suppliers, supplier],
+    })),
+
+  updateSupplier: (id, supplier) =>
+    set((state) => ({
+      suppliers: state.suppliers.map((s) =>
+        s.id === id ? { ...s, ...supplier, updateTime: new Date().toLocaleString() } : s
+      ),
+    })),
+
+  deleteSupplier: (id) =>
+    set((state) => ({
+      suppliers: state.suppliers.filter((s) => s.id !== id),
+    })),
 
   addInboundOrder: (order) =>
     set((state) => ({

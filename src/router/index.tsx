@@ -8,6 +8,7 @@ import Location from '../pages/Location';
 import Inventory from '../pages/Inventory';
 import Stocktake from '../pages/Stocktake';
 import Report from '../pages/Report';
+import Supplier from '../pages/Supplier';
 import { useAuthStore } from '../store/authStore';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
@@ -62,6 +63,10 @@ export const router = createBrowserRouter([
       {
         path: 'report',
         element: <Report />,
+      },
+      {
+        path: 'supplier',
+        element: <Supplier />,
       },
     ],
   },

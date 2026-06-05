@@ -6,6 +6,19 @@ export interface User {
   avatar?: string;
 }
 
+export interface Supplier {
+  id: string;
+  code: string;
+  companyName: string;
+  contact: string;
+  phone: string;
+  address: string;
+  status: 'active' | 'inactive';
+  creditRating: 'A' | 'B' | 'C' | 'D';
+  createTime: string;
+  updateTime: string;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -45,6 +58,7 @@ export interface Inventory {
 export interface InboundOrder {
   id: string;
   orderNo: string;
+  supplierId: string;
   supplier: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   items: InboundItem[];

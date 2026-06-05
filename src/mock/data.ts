@@ -1,5 +1,6 @@
 import type {
   User,
+  Supplier,
   Product,
   Location,
   Inventory,
@@ -16,6 +17,69 @@ export const mockUser: User = {
   role: 'admin',
   avatar: '',
 };
+
+export const mockSuppliers: Supplier[] = [
+  {
+    id: '1',
+    code: 'SUP001',
+    companyName: '供应商A',
+    contact: '张经理',
+    phone: '13800138001',
+    address: '北京市朝阳区建国路88号',
+    status: 'active',
+    creditRating: 'A',
+    createTime: '2024-01-15 10:00:00',
+    updateTime: '2024-01-15 10:00:00',
+  },
+  {
+    id: '2',
+    code: 'SUP002',
+    companyName: '供应商B',
+    contact: '李主管',
+    phone: '13800138002',
+    address: '上海市浦东新区张江高科技园区',
+    status: 'active',
+    creditRating: 'B',
+    createTime: '2024-02-20 14:30:00',
+    updateTime: '2024-02-20 14:30:00',
+  },
+  {
+    id: '3',
+    code: 'SUP003',
+    companyName: '供应商C',
+    contact: '王工',
+    phone: '13800138003',
+    address: '广州市天河区天河路385号',
+    status: 'active',
+    creditRating: 'A',
+    createTime: '2024-03-10 09:15:00',
+    updateTime: '2024-03-10 09:15:00',
+  },
+  {
+    id: '4',
+    code: 'SUP004',
+    companyName: '供应商D',
+    contact: '赵经理',
+    phone: '13800138004',
+    address: '深圳市南山区科技园',
+    status: 'active',
+    creditRating: 'C',
+    createTime: '2024-04-05 11:20:00',
+    updateTime: '2024-04-05 11:20:00',
+  },
+  {
+    id: '5',
+    code: 'SUP005',
+    companyName: '供应商E',
+    contact: '刘总',
+    phone: '13800138005',
+    address: '杭州市西湖区文三路',
+    status: 'inactive',
+    creditRating: 'D',
+    createTime: '2024-04-18 16:45:00',
+    updateTime: '2024-05-01 08:00:00',
+  },
+];
 
 export const mockProducts: Product[] = [
   { id: '1', sku: 'SKU001', name: '机械轴承', category: '机械零件', unit: '个', price: 150 },
@@ -125,6 +189,7 @@ const generateOrderNo = () => `ORD${Date.now()}${Math.floor(Math.random() * 1000
 export const mockInboundOrders: InboundOrder[] = [];
 
 const createInboundOrder = (
+  supplierId: string,
   supplier: string,
   status: 'pending' | 'in_progress' | 'completed',
   items: Array<{
@@ -142,6 +207,7 @@ const createInboundOrder = (
   const order: InboundOrder = {
     id: String(mockInboundOrders.length + 1),
     orderNo: generateOrderNo(),
+    supplierId,
     supplier,
     status,
     items: items.map((item, idx) => {
@@ -178,6 +244,7 @@ const createInboundOrder = (
 };
 
 createInboundOrder(
+  '1',
   '供应商A',
   'pending',
   [
@@ -188,6 +255,7 @@ createInboundOrder(
 );
 
 createInboundOrder(
+  '2',
   '供应商B',
   'in_progress',
   [
@@ -200,6 +268,7 @@ createInboundOrder(
 );
 
 createInboundOrder(
+  '3',
   '供应商C',
   'completed',
   [
@@ -218,6 +287,7 @@ createInboundOrder(
 );
 
 createInboundOrder(
+  '4',
   '供应商D',
   'completed',
   [
@@ -244,6 +314,7 @@ createInboundOrder(
 );
 
 createInboundOrder(
+  '5',
   '供应商E',
   'completed',
   [
