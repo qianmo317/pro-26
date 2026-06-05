@@ -14,6 +14,7 @@ import type {
   InventoryBatch,
   BatchTraceData,
   BatchTraceEvent,
+  OutboundSplitData,
 } from '../types';
 import {
   mockSuppliers,
@@ -75,6 +76,9 @@ interface WarehouseState {
   completeTransfer: (id: string) => void;
   getInventoryBatches: () => InventoryBatch[];
   getBatchTraceData: (batchNo: string) => BatchTraceData | null;
+  splitOutboundOrder: (splitData: OutboundSplitData) => OutboundOrder[];
+  getChildOrders: (parentId: string) => OutboundOrder[];
+  getParentOrder: (childId: string) => OutboundOrder | undefined;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -593,5 +597,79 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       totalOutbound,
       remainingQuantity,
     };
+  },
+
+  splitOutboundOrder: (splitData) => {
+    const state = get();
+    const parentOrder = state.outboundOrders.find((o) => o.id === splitData.parentOrderId);
+    if (!parentOrder) return [];
+
+    const now = new Date().toLocaleString();
+    const childIds: string[] = [];
+    const newOrders: OutboundOrder[] = [];
+
+    splitData.subOrders.forEach((subOrder, index) => {
+      const childId = `${parentOrder.id}-${index + 1}`;
+      childIds.push(childId);
+
+      const childOrder: OutboundOrder = {
+        id: childId,
+        orderNo: `${parentOrder.orderNo}-${index + 1}`,
+        customerId: parentOrder.customerId,
+        customer: parentOrder.customer,
+        shippingAddress: parentOrder.shippingAddress,
+        contact: parentOrder.contact,
+        phone: parentOrder.phone,
+        status: 'pending',
+        items: subOrder.items.map((item, itemIdx) => ({
+          id: `${childId}-${itemIdx + 1}`,
+          productId: item.productId,
+          productName: item.productName,
+          productSku: item.productSku,
+          planQuantity: item.planQuantity,
+          actualQuantity: 0,
+          batchNo: item.batchNo,
+        })),
+        createTime: now,
+        updateTime: now,
+        remark: subOrder.remark,
+        parentId: parentOrder.id,
+      };
+
+      newOrders.push(childOrder);
+    });
+
+    const updatedParentOrder: OutboundOrder = {
+      ...parentOrder,
+      status: 'split',
+      isParent: true,
+      childIds,
+      splitTime: now,
+      splitRemark: splitData.splitRemark,
+      updateTime: now,
+    };
+
+    set((state) => ({
+      outboundOrders: [
+        ...state.outboundOrders.map((o) =>
+          o.id === parentOrder.id ? updatedParentOrder : o
+        ),
+        ...newOrders,
+      ],
+    }));
+
+    return newOrders;
+  },
+
+  getChildOrders: (parentId) => {
+    const state = get();
+    return state.outboundOrders.filter((o) => o.parentId === parentId);
+  },
+
+  getParentOrder: (childId) => {
+    const state = get();
+    const childOrder = state.outboundOrders.find((o) => o.id === childId);
+    if (!childOrder || !childOrder.parentId) return undefined;
+    return state.outboundOrders.find((o) => o.id === childOrder.parentId);
   },
 }));

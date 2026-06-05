@@ -111,12 +111,37 @@ export interface OutboundOrder {
   shippingAddress?: string;
   contact?: string;
   phone?: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'split';
   items: OutboundItem[];
   createTime: string;
   updateTime: string;
   operator?: string;
   remark?: string;
+  parentId?: string;
+  isParent?: boolean;
+  childIds?: string[];
+  splitTime?: string;
+  splitRemark?: string;
+}
+
+export interface OutboundSplitItem {
+  productId: string;
+  productName: string;
+  productSku: string;
+  planQuantity: number;
+  batchNo?: string;
+}
+
+export interface OutboundSplitSubOrder {
+  id: string;
+  items: OutboundSplitItem[];
+  remark?: string;
+}
+
+export interface OutboundSplitData {
+  parentOrderId: string;
+  subOrders: OutboundSplitSubOrder[];
+  splitRemark?: string;
 }
 
 export interface OutboundItem {
