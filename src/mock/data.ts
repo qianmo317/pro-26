@@ -146,14 +146,14 @@ export const mockCustomers: Customer[] = [
 ];
 
 export const mockProducts: Product[] = [
-  { id: '1', sku: 'SKU001', name: '机械轴承', category: '机械零件', unit: '个', price: 150 },
-  { id: '2', sku: 'SKU002', name: '螺丝套装', category: '紧固件', unit: '套', price: 25 },
-  { id: '3', sku: 'SKU003', name: '电机马达', category: '电气设备', unit: '台', price: 800 },
-  { id: '4', sku: 'SKU004', name: '齿轮箱', category: '机械零件', unit: '个', price: 1200 },
-  { id: '5', sku: 'SKU005', name: '液压油管', category: '液压配件', unit: '米', price: 85 },
-  { id: '6', sku: 'SKU006', name: '密封圈', category: '密封件', unit: '个', price: 12 },
-  { id: '7', sku: 'SKU007', name: 'PLC控制器', category: '电气设备', unit: '台', price: 2500 },
-  { id: '8', sku: 'SKU008', name: '传感器', category: '电气设备', unit: '个', price: 350 },
+  { id: '1', sku: 'SKU001', name: '机械轴承', category: '机械零件', unit: '个', price: 150, safetyStockMin: 50, safetyStockMax: 200 },
+  { id: '2', sku: 'SKU002', name: '螺丝套装', category: '紧固件', unit: '套', price: 25, safetyStockMin: 100, safetyStockMax: 300 },
+  { id: '3', sku: 'SKU003', name: '电机马达', category: '电气设备', unit: '台', price: 800, safetyStockMin: 10, safetyStockMax: 50 },
+  { id: '4', sku: 'SKU004', name: '齿轮箱', category: '机械零件', unit: '个', price: 1200, safetyStockMin: 5, safetyStockMax: 30 },
+  { id: '5', sku: 'SKU005', name: '液压油管', category: '液压配件', unit: '米', price: 85, safetyStockMin: 30, safetyStockMax: 100 },
+  { id: '6', sku: 'SKU006', name: '密封圈', category: '密封件', unit: '个', price: 12, safetyStockMin: 150, safetyStockMax: 250 },
+  { id: '7', sku: 'SKU007', name: 'PLC控制器', category: '电气设备', unit: '台', price: 2500, safetyStockMin: 5, safetyStockMax: 20 },
+  { id: '8', sku: 'SKU008', name: '传感器', category: '电气设备', unit: '个', price: 350, safetyStockMin: 20, safetyStockMax: 80 },
 ];
 
 const zones = ['A区', 'B区', 'C区', 'D区'];

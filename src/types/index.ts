@@ -45,6 +45,8 @@ export interface Product {
   category: string;
   unit: string;
   price: number;
+  safetyStockMin: number;
+  safetyStockMax: number;
   description?: string;
 }
 

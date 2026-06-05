@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import type { ReactElement } from 'react';
 import Layout from '../components/Layout';
 import Login from '../pages/Login';
 import Dashboard from '../pages/Dashboard';
@@ -10,9 +11,10 @@ import Stocktake from '../pages/Stocktake';
 import Report from '../pages/Report';
 import Supplier from '../pages/Supplier';
 import Customer from '../pages/Customer';
+import Product from '../pages/Product';
 import { useAuthStore } from '../store/authStore';
 
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+const ProtectedRoute = ({ children }: { children: ReactElement }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -72,6 +74,10 @@ export const router = createBrowserRouter([
       {
         path: 'customer',
         element: <Customer />,
+      },
+      {
+        path: 'product',
+        element: <Product />,
       },
     ],
   },

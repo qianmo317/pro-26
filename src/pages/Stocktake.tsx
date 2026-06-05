@@ -14,7 +14,7 @@ import {
   Grid,
   Card,
 } from '@arco-design/web-react';
-import { IconPlus, IconEye, IconEdit } from '@arco-design/web-react/icon';
+import { IconPlus, IconEye } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { toast } from '../components/Toast';
 import type { StocktakePlan } from '../types';
@@ -32,7 +32,7 @@ export default function Stocktake() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<StocktakePlan | null>(null);
   const [form] = Form.useForm();
-  const { stocktakePlans, locations, updateStocktakeItem, completeStocktake } =
+  const { stocktakePlans, updateStocktakeItem, completeStocktake } =
     useWarehouseStore();
 
   const columns = [
@@ -123,7 +123,7 @@ export default function Stocktake() {
     updateStocktakeItem(planId, itemId, value);
   };
 
-  const handleSubmit = (values: any) => {
+  const handleSubmit = (_values: any) => {
     toast.success('盘点计划创建成功（演示模式）');
     setModalVisible(false);
     form.resetFields();

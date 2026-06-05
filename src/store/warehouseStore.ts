@@ -23,6 +23,19 @@ import {
   mockReportData,
 } from '../mock/data';
 
+export interface InventorySummary {
+  productId: string;
+  productName: string;
+  productSku: string;
+  category: string;
+  unit: string;
+  totalQuantity: number;
+  safetyStockMin: number;
+  safetyStockMax: number;
+  stockStatus: 'normal' | 'low' | 'overstock';
+  locationCount: number;
+}
+
 interface WarehouseState {
   suppliers: Supplier[];
   customers: Customer[];
@@ -46,6 +59,10 @@ interface WarehouseState {
   updateOutboundOrder: (id: string, order: Partial<OutboundOrder>) => void;
   updateStocktakeItem: (planId: string, itemId: string, actual: number) => void;
   completeStocktake: (planId: string) => void;
+  updateProductSafetyStock: (id: string, safetyStockMin: number, safetyStockMax: number) => void;
+  getInventorySummary: () => InventorySummary[];
+  getLowStockCount: () => number;
+  getOverstockCount: () => number;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -174,4 +191,63 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
           : plan
       ),
     })),
+
+  updateProductSafetyStock: (id, safetyStockMin, safetyStockMax) =>
+    set((state) => ({
+      products: state.products.map((p) =>
+        p.id === id ? { ...p, safetyStockMin, safetyStockMax } : p
+      ),
+    })),
+
+  getInventorySummary: () => {
+    const state = get();
+    const summaryMap = new Map<string, { totalQuantity: number; locationCount: number; locationIds: Set<string> }>();
+
+    state.inventory.forEach((inv) => {
+      const existing = summaryMap.get(inv.productId);
+      if (existing) {
+        existing.totalQuantity += inv.quantity;
+        existing.locationIds.add(inv.locationId);
+        existing.locationCount = existing.locationIds.size;
+      } else {
+        summaryMap.set(inv.productId, {
+          totalQuantity: inv.quantity,
+          locationCount: 1,
+          locationIds: new Set([inv.locationId]),
+        });
+      }
+    });
+
+    return state.products.map((product) => {
+      const summary = summaryMap.get(product.id) || { totalQuantity: 0, locationCount: 0, locationIds: new Set() };
+      let stockStatus: 'normal' | 'low' | 'overstock' = 'normal';
+      if (summary.totalQuantity < product.safetyStockMin) {
+        stockStatus = 'low';
+      } else if (summary.totalQuantity > product.safetyStockMax) {
+        stockStatus = 'overstock';
+      }
+      return {
+        productId: product.id,
+        productName: product.name,
+        productSku: product.sku,
+        category: product.category,
+        unit: product.unit,
+        totalQuantity: summary.totalQuantity,
+        safetyStockMin: product.safetyStockMin,
+        safetyStockMax: product.safetyStockMax,
+        stockStatus,
+        locationCount: summary.locationCount,
+      };
+    });
+  },
+
+  getLowStockCount: () => {
+    const summary = get().getInventorySummary();
+    return summary.filter((s) => s.stockStatus === 'low').length;
+  },
+
+  getOverstockCount: () => {
+    const summary = get().getInventorySummary();
+    return summary.filter((s) => s.stockStatus === 'overstock').length;
+  },
 }));

@@ -1,12 +1,14 @@
 import { Grid, Card, Table, Tag } from '@arco-design/web-react';
-import { IconImport, IconExport, IconStorage, IconPlus } from '@arco-design/web-react/icon';
+import { IconImport, IconExport, IconStorage, IconPlus, IconExclamation, IconInfoCircle } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
+import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 
 const Row = Grid.Row;
 const Col = Grid.Col;
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const {
     locations,
     inventory,
@@ -14,7 +16,12 @@ export default function Dashboard() {
     outboundOrders,
     stocktakePlans,
     reportData,
+    getLowStockCount,
+    getOverstockCount,
   } = useWarehouseStore();
+
+  const lowStockCount = getLowStockCount();
+  const overstockCount = getOverstockCount();
 
   const statCards = [
     {
@@ -205,6 +212,14 @@ export default function Dashboard() {
     })),
   ].sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime());
 
+  const handleLowStockClick = () => {
+    navigate('/inventory?status=low');
+  };
+
+  const handleOverstockClick = () => {
+    navigate('/inventory?status=overstock');
+  };
+
   return (
     <div>
       <Row gutter={16}>
@@ -222,6 +237,55 @@ export default function Dashboard() {
             </div>
           </Col>
         ))}
+      </Row>
+
+      <Row gutter={16} style={{ marginTop: '16px' }}>
+        <Col span={12}>
+          <div
+            className="stat-card danger"
+            onClick={handleLowStockClick}
+            style={{ cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>库存不足预警</div>
+                <div style={{ fontSize: '32px', fontWeight: '600', color: '#ee4d4d' }}>{lowStockCount}</div>
+                <div style={{ fontSize: '12px', color: '#999', marginTop: '8px' }}>
+                  低于安全库存下限的商品数量
+                </div>
+              </div>
+              <div className="stat-icon danger">
+                <IconExclamation style={{ fontSize: '32px' }} />
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: '#ee4d4d' }}>点击查看详情 →</span>
+            </div>
+          </div>
+        </Col>
+        <Col span={12}>
+          <div
+            className="stat-card warning"
+            onClick={handleOverstockClick}
+            style={{ cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>库存积压预警</div>
+                <div style={{ fontSize: '32px', fontWeight: '600', color: '#ff7d00' }}>{overstockCount}</div>
+                <div style={{ fontSize: '12px', color: '#999', marginTop: '8px' }}>
+                  高于安全库存上限的商品数量
+                </div>
+              </div>
+              <div className="stat-icon warning">
+                <IconInfoCircle style={{ fontSize: '32px' }} />
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: '#ff7d00' }}>点击查看详情 →</span>
+            </div>
+          </div>
+        </Col>
       </Row>
 
       <Row gutter={16} style={{ marginTop: '24px' }}>

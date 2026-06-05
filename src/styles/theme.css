@@ -114,6 +114,10 @@ body {
   border-left-color: var(--info-color);
 }
 
+.stat-card.danger {
+  border-left-color: var(--danger-color);
+}
+
 .stat-icon {
   width: 48px;
   height: 48px;
@@ -142,6 +146,11 @@ body {
 .stat-icon.info {
   background: #e3f2fd;
   color: var(--info-color);
+}
+
+.stat-icon.danger {
+  background: #ffebee;
+  color: var(--danger-color);
 }
 
 .location-grid {
