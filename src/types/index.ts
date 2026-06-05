@@ -338,6 +338,47 @@ export interface InventoryChangeRecord {
   remark?: string;
 }
 
+export type CycleCountPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+export type CycleCountScope = 'zone' | 'category' | 'abc';
+export type ABCClass = 'A' | 'B' | 'C';
+
+export interface CycleCountConfig {
+  id: string;
+  name: string;
+  period: CycleCountPeriod;
+  scope: CycleCountScope;
+  zoneValues?: string[];
+  categoryValues?: string[];
+  abcValues?: ABCClass[];
+  enabled: boolean;
+  lastGenerateTime?: string;
+  nextGenerateTime?: string;
+  autoGenerate: boolean;
+  createTime: string;
+  updateTime: string;
+  operator?: string;
+  remark?: string;
+}
+
+export interface CycleCountRecommendation {
+  configId: string;
+  configName: string;
+  recommendedScope: string;
+  recommendedItems: Array<{
+    productId: string;
+    productName: string;
+    productSku: string;
+    locationId: string;
+    locationCode: string;
+    lastStocktakeTime?: string;
+    daysSinceLastStocktake: number;
+    abcClass: ABCClass;
+    category: string;
+    zone: string;
+  }>;
+  reason: string;
+}
+
 export interface AppState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;

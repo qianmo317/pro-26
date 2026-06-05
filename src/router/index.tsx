@@ -9,6 +9,7 @@ import Transfer from '../pages/Transfer';
 import Location from '../pages/Location';
 import Inventory from '../pages/Inventory';
 import Stocktake from '../pages/Stocktake';
+import CycleCount from '../pages/CycleCount';
 import Report from '../pages/Report';
 import Supplier from '../pages/Supplier';
 import Customer from '../pages/Customer';
@@ -67,6 +68,10 @@ export const router = createBrowserRouter([
       {
         path: 'stocktake',
         element: <Stocktake />,
+      },
+      {
+        path: 'cycle-count',
+        element: <CycleCount />,
       },
       {
         path: 'report',

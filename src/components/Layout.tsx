@@ -18,6 +18,7 @@ import {
   IconUserAdd,
   IconList,
   IconSwap,
+  IconSchedule,
 } from '@arco-design/web-react/icon';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -36,6 +37,7 @@ const menuItems = [
   { key: 'location', icon: <IconStorage />, text: '库位总览' },
   { key: 'inventory', icon: <IconSearch />, text: '库存查询' },
   { key: 'stocktake', icon: <IconPlus />, text: '盘点管理' },
+  { key: 'cycle-count', icon: <IconSchedule />, text: '周期盘点' },
   { key: 'product', icon: <IconList />, text: '商品管理' },
   { key: 'supplier', icon: <IconUserGroup />, text: '供应商管理' },
   { key: 'customer', icon: <IconUserAdd />, text: '客户管理' },

@@ -19,6 +19,10 @@ import type {
   HeatmapDimension,
   InventoryChangeRecord,
   InventoryChangeType,
+  CycleCountConfig,
+  CycleCountRecommendation,
+  CycleCountPeriod,
+  ABCClass,
 } from '../types';
 import {
   mockSuppliers,
@@ -33,6 +37,8 @@ import {
   mockTransferOrders,
   mockLocationActivities,
   mockInventoryChangeRecords,
+  mockCycleCountConfigs,
+  getABCClass,
 } from '../mock/data';
 
 export interface InventorySummary {
@@ -61,6 +67,7 @@ interface WarehouseState {
   transferOrders: TransferOrder[];
   locationActivities: LocationActivity[];
   inventoryChangeRecords: InventoryChangeRecord[];
+  cycleCountConfigs: CycleCountConfig[];
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
@@ -93,6 +100,16 @@ interface WarehouseState {
   getMaxActivityCount: (dimension: HeatmapDimension) => number;
   getInventoryChangeByProduct: (productId: string, types?: InventoryChangeType[]) => InventoryChangeRecord[];
   getInventoryChangeByLocation: (locationId: string, types?: InventoryChangeType[]) => InventoryChangeRecord[];
+  addCycleCountConfig: (config: Omit<CycleCountConfig, 'id' | 'createTime' | 'updateTime' | 'nextGenerateTime'>) => void;
+  updateCycleCountConfig: (id: string, config: Partial<CycleCountConfig>) => void;
+  deleteCycleCountConfig: (id: string) => void;
+  toggleCycleCountConfig: (id: string) => void;
+  getCycleCountRecommendation: (configId: string) => CycleCountRecommendation | null;
+  generateStocktakePlanFromConfig: (configId: string) => StocktakePlan | null;
+  checkAndGenerateAutoPlans: () => StocktakePlan[];
+  getLastStocktakeTime: (productId: string, locationId: string) => string | undefined;
+  getABCClassForProduct: (productId: string) => ABCClass;
+  calculateNextGenerateTime: (period: CycleCountPeriod, lastTime?: string) => string;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -108,6 +125,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   transferOrders: mockTransferOrders,
   locationActivities: mockLocationActivities,
   inventoryChangeRecords: mockInventoryChangeRecords,
+  cycleCountConfigs: mockCycleCountConfigs,
 
   addSupplier: (supplier) =>
     set((state) => ({
@@ -732,5 +750,266 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       return records.filter((r) => types.includes(r.type));
     }
     return records;
+  },
+
+  getABCClassForProduct: (productId) => {
+    return getABCClass(productId);
+  },
+
+  calculateNextGenerateTime: (period, lastTime) => {
+    const baseTime = lastTime ? new Date(lastTime) : new Date();
+    const next = new Date(baseTime);
+
+    switch (period) {
+      case 'weekly':
+        next.setDate(next.getDate() + 7);
+        break;
+      case 'monthly':
+        next.setMonth(next.getMonth() + 1);
+        break;
+      case 'quarterly':
+        next.setMonth(next.getMonth() + 3);
+        break;
+      case 'yearly':
+        next.setFullYear(next.getFullYear() + 1);
+        break;
+    }
+
+    next.setHours(8, 0, 0, 0);
+    return next.toLocaleString();
+  },
+
+  getLastStocktakeTime: (productId, locationId) => {
+    const state = get();
+    let lastTime: string | undefined;
+
+    for (const plan of state.stocktakePlans) {
+      if (plan.status === 'completed' || plan.status === 'in_progress') {
+        for (const item of plan.items) {
+          if (item.productId === productId && item.locationId === locationId) {
+            const planTime = plan.endTime || plan.startTime || plan.createTime;
+            if (!lastTime || new Date(planTime) > new Date(lastTime)) {
+              lastTime = planTime;
+            }
+          }
+        }
+      }
+    }
+
+    return lastTime;
+  },
+
+  addCycleCountConfig: (config) => {
+    const now = new Date().toLocaleString();
+    const nextGenerateTime = get().calculateNextGenerateTime(config.period, config.lastGenerateTime);
+    const newConfig: CycleCountConfig = {
+      ...config,
+      id: String(Date.now()),
+      createTime: now,
+      updateTime: now,
+      nextGenerateTime,
+    };
+    set((state) => ({
+      cycleCountConfigs: [...state.cycleCountConfigs, newConfig],
+    }));
+  },
+
+  updateCycleCountConfig: (id, config) => {
+    const now = new Date().toLocaleString();
+    set((state) => ({
+      cycleCountConfigs: state.cycleCountConfigs.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              ...config,
+              updateTime: now,
+              nextGenerateTime: config.period
+                ? get().calculateNextGenerateTime(config.period, c.lastGenerateTime)
+                : c.nextGenerateTime,
+            }
+          : c
+      ),
+    }));
+  },
+
+  deleteCycleCountConfig: (id) => {
+    set((state) => ({
+      cycleCountConfigs: state.cycleCountConfigs.filter((c) => c.id !== id),
+    }));
+  },
+
+  toggleCycleCountConfig: (id) => {
+    set((state) => ({
+      cycleCountConfigs: state.cycleCountConfigs.map((c) =>
+        c.id === id ? { ...c, enabled: !c.enabled, updateTime: new Date().toLocaleString() } : c
+      ),
+    }));
+  },
+
+  getCycleCountRecommendation: (configId) => {
+    const state = get();
+    const config = state.cycleCountConfigs.find((c) => c.id === configId);
+    if (!config) return null;
+
+    const periodDays: Record<string, number> = {
+      weekly: 7,
+      monthly: 30,
+      quarterly: 90,
+      yearly: 365,
+    };
+
+    const periodDayCount = periodDays[config.period] || 30;
+    const now = new Date();
+
+    const recommendedItems: CycleCountRecommendation['recommendedItems'] = [];
+
+    for (const inv of state.inventory) {
+      const product = state.products.find((p) => p.id === inv.productId);
+      const location = state.locations.find((l) => l.id === inv.locationId);
+      if (!product || !location) continue;
+
+      let matchesScope = false;
+      if (config.scope === 'zone' && config.zoneValues?.includes(location.zone)) {
+        matchesScope = true;
+      } else if (config.scope === 'category' && config.categoryValues?.includes(product.category)) {
+        matchesScope = true;
+      } else if (config.scope === 'abc') {
+        const abcClass = state.getABCClassForProduct(product.id);
+        if (config.abcValues?.includes(abcClass)) {
+          matchesScope = true;
+        }
+      }
+
+      if (!matchesScope) continue;
+
+      const lastStocktakeTime = state.getLastStocktakeTime(product.id, location.id);
+      const lastDate = lastStocktakeTime ? new Date(lastStocktakeTime) : new Date(0);
+      const daysSinceLastStocktake = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysSinceLastStocktake >= periodDayCount * 0.8) {
+        recommendedItems.push({
+          productId: product.id,
+          productName: product.name,
+          productSku: product.sku,
+          locationId: location.id,
+          locationCode: location.code,
+          lastStocktakeTime,
+          daysSinceLastStocktake,
+          abcClass: state.getABCClassForProduct(product.id),
+          category: product.category,
+          zone: location.zone,
+        });
+      }
+    }
+
+    recommendedItems.sort((a, b) => b.daysSinceLastStocktake - a.daysSinceLastStocktake);
+
+    const scopeText: Record<string, string> = {
+      zone: `区域: ${config.zoneValues?.join(', ')}`,
+      category: `类别: ${config.categoryValues?.join(', ')}`,
+      abc: `ABC分类: ${config.abcValues?.join(', ')}`,
+    };
+
+    let reason = `根据 ${config.period === 'weekly' ? '每周' : config.period === 'monthly' ? '每月' : config.period === 'quarterly' ? '每季度' : '每年'} 盘点周期，`;
+    reason += `筛选出 ${recommendedItems.length} 项超过 ${Math.floor(periodDayCount * 0.8)} 天未盘点的库存。`;
+    reason += ` 优先级：按距离上次盘点天数降序排列。`;
+
+    return {
+      configId: config.id,
+      configName: config.name,
+      recommendedScope: scopeText[config.scope],
+      recommendedItems,
+      reason,
+    };
+  },
+
+  generateStocktakePlanFromConfig: (configId) => {
+    const state = get();
+    const config = state.cycleCountConfigs.find((c) => c.id === configId);
+    if (!config) return null;
+
+    const recommendation = state.getCycleCountRecommendation(configId);
+    if (!recommendation) return null;
+
+    const now = new Date().toLocaleString();
+    const planNo = `STK-CYC-${Date.now()}`;
+
+    const locationIds = new Set<string>();
+    const items: StocktakePlan['items'] = [];
+
+    recommendation.recommendedItems.forEach((rec, idx) => {
+      const inv = state.inventory.find(
+        (i) => i.productId === rec.productId && i.locationId === rec.locationId
+      );
+      if (inv) {
+        locationIds.add(inv.locationId);
+        items.push({
+          id: String(idx + 1),
+          inventoryId: inv.id,
+          productId: inv.productId,
+          productName: inv.productName,
+          productSku: inv.productSku,
+          locationId: inv.locationId,
+          locationCode: inv.locationCode,
+          systemQuantity: inv.quantity,
+          actualQuantity: 0,
+          diffQuantity: 0,
+          status: 'pending',
+          batchNo: inv.batchNo,
+        });
+      }
+    });
+
+    if (items.length === 0) return null;
+
+    const newPlan: StocktakePlan = {
+      id: String(Date.now()),
+      planNo,
+      name: `${config.name} - ${new Date().toLocaleDateString()}`,
+      type: 'cycle',
+      status: 'pending',
+      locationIds: Array.from(locationIds),
+      items,
+      createTime: now,
+      operator: '系统自动',
+      remark: `由周期盘点配置"${config.name}"自动生成`,
+    };
+
+    set((state) => ({
+      stocktakePlans: [...state.stocktakePlans, newPlan],
+      cycleCountConfigs: state.cycleCountConfigs.map((c) =>
+        c.id === configId
+          ? {
+              ...c,
+              lastGenerateTime: now,
+              nextGenerateTime: state.calculateNextGenerateTime(c.period, now),
+              updateTime: now,
+            }
+          : c
+      ),
+    }));
+
+    return newPlan;
+  },
+
+  checkAndGenerateAutoPlans: () => {
+    const state = get();
+    const now = new Date();
+    const generatedPlans: StocktakePlan[] = [];
+
+    for (const config of state.cycleCountConfigs) {
+      if (!config.enabled || !config.autoGenerate) continue;
+      if (!config.nextGenerateTime) continue;
+
+      const nextGenerateDate = new Date(config.nextGenerateTime);
+      if (now >= nextGenerateDate) {
+        const plan = state.generateStocktakePlanFromConfig(config.id);
+        if (plan) {
+          generatedPlans.push(plan);
+        }
+      }
+    }
+
+    return generatedPlans;
   },
 }));

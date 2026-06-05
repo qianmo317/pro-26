@@ -935,3 +935,61 @@ const generateInventoryChangeRecords = () => {
 };
 
 generateInventoryChangeRecords();
+
+import type { CycleCountConfig, ABCClass } from '../types';
+
+export const mockCycleCountConfigs: CycleCountConfig[] = [
+  {
+    id: '1',
+    name: 'A类商品月度盘点',
+    period: 'monthly',
+    scope: 'abc',
+    abcValues: ['A'],
+    enabled: true,
+    lastGenerateTime: '2024-05-01 08:00:00',
+    nextGenerateTime: '2024-06-01 08:00:00',
+    autoGenerate: true,
+    createTime: '2024-01-01 00:00:00',
+    updateTime: '2024-05-01 08:00:00',
+    operator: '系统管理员',
+    remark: '每月盘点高价值A类商品',
+  },
+  {
+    id: '2',
+    name: 'A区周度盘点',
+    period: 'weekly',
+    scope: 'zone',
+    zoneValues: ['A区'],
+    enabled: true,
+    lastGenerateTime: '2024-05-27 08:00:00',
+    nextGenerateTime: '2024-06-03 08:00:00',
+    autoGenerate: true,
+    createTime: '2024-02-15 10:00:00',
+    updateTime: '2024-05-27 08:00:00',
+    operator: '系统管理员',
+    remark: '每周盘点A区高周转区域',
+  },
+  {
+    id: '3',
+    name: '电气设备季度盘点',
+    period: 'quarterly',
+    scope: 'category',
+    categoryValues: ['电气设备'],
+    enabled: false,
+    lastGenerateTime: '2024-04-01 08:00:00',
+    nextGenerateTime: '2024-07-01 08:00:00',
+    autoGenerate: false,
+    createTime: '2024-01-15 14:00:00',
+    updateTime: '2024-04-01 08:00:00',
+    operator: '系统管理员',
+    remark: '每季度盘点电气设备类商品',
+  },
+];
+
+export const getABCClass = (productId: string): ABCClass => {
+  const product = getProductById(productId);
+  if (!product) return 'C';
+  if (product.price >= 1000) return 'A';
+  if (product.price >= 100) return 'B';
+  return 'C';
+};

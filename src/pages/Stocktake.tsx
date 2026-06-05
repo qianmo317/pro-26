@@ -13,8 +13,10 @@ import {
   InputNumber,
   Grid,
   Card,
+  Alert,
 } from '@arco-design/web-react';
-import { IconPlus, IconEye } from '@arco-design/web-react/icon';
+import { IconPlus, IconEye, IconSchedule, IconRight } from '@arco-design/web-react/icon';
+import { useNavigate } from 'react-router-dom';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { toast } from '../components/Toast';
 import type { StocktakePlan } from '../types';
@@ -32,7 +34,8 @@ export default function Stocktake() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<StocktakePlan | null>(null);
   const [form] = Form.useForm();
-  const { stocktakePlans, updateStocktakeItem, completeStocktake } =
+  const navigate = useNavigate();
+  const { stocktakePlans, updateStocktakeItem, completeStocktake, cycleCountConfigs } =
     useWarehouseStore();
 
   const columns = [
@@ -202,14 +205,48 @@ export default function Stocktake() {
     },
   ];
 
+  const enabledConfigs = cycleCountConfigs.filter((c) => c.enabled);
+
   return (
     <div>
+      {enabledConfigs.length > 0 && (
+        <Alert
+          type="info"
+          style={{ marginBottom: '16px' }}
+          content={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <Space>
+                  <IconSchedule style={{ color: '#165dff' }} />
+                  <span>
+                    已配置 <strong>{enabledConfigs.length}</strong> 个周期盘点规则，系统将按周期自动生成盘点计划
+                  </span>
+                </Space>
+              </div>
+              <Button
+                type="text"
+                size="small"
+                onClick={() => navigate('/cycle-count')}
+              >
+                查看配置 <IconRight />
+              </Button>
+            </div>
+          }
+        />
+      )}
+
       <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between' }}>
-        <div>
+        <Space>
           <Button type="primary" icon={<IconPlus />} onClick={() => setModalVisible(true)}>
             创建盘点计划
           </Button>
-        </div>
+          <Button
+            icon={<IconSchedule />}
+            onClick={() => navigate('/cycle-count')}
+          >
+            周期盘点配置
+          </Button>
+        </Space>
       </div>
 
       <Tabs defaultActiveTab="all">
