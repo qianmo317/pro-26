@@ -9,6 +9,7 @@ import type {
   OutboundOrder,
   StocktakePlan,
   ReportData,
+  TransferOrder,
 } from '../types';
 
 export const mockUser: User = {
@@ -626,3 +627,101 @@ export const mockReportData: ReportData = {
   totalLocations,
   usedLocations,
 };
+
+export const mockTransferOrders: TransferOrder[] = [];
+
+const createTransferOrder = (
+  sourceLocationId: string,
+  targetLocationId: string,
+  status: 'pending' | 'in_transit' | 'completed',
+  items: Array<{
+    productId: string;
+    quantity: number;
+    batchNo: string;
+  }>,
+  createTime: string,
+  updateTime: string,
+  operator?: string
+) => {
+  const sourceLocation = getLocationById(sourceLocationId);
+  const targetLocation = getLocationById(targetLocationId);
+  if (!sourceLocation || !targetLocation) return;
+
+  const order: TransferOrder = {
+    id: String(mockTransferOrders.length + 1),
+    orderNo: `TRF${Date.now()}${mockTransferOrders.length + 1}`,
+    sourceLocationId,
+    sourceLocationCode: sourceLocation.code,
+    targetLocationId,
+    targetLocationCode: targetLocation.code,
+    status,
+    items: items.map((item, idx) => {
+      const product = getProductById(item.productId);
+      return {
+        id: `${mockTransferOrders.length + 1}-${idx + 1}`,
+        productId: item.productId,
+        productName: product?.name || '',
+        productSku: product?.sku || '',
+        quantity: item.quantity,
+        batchNo: item.batchNo,
+        sourceLocationId,
+        sourceLocationCode: sourceLocation.code,
+        targetLocationId,
+        targetLocationCode: targetLocation.code,
+      };
+    }),
+    createTime,
+    updateTime,
+    operator,
+  };
+
+  mockTransferOrders.push(order);
+
+  if (status === 'completed') {
+    order.items.forEach((item) => {
+      removeInventory(item.productId, item.sourceLocationId, item.quantity, item.batchNo);
+      addInventory(
+        item.productId,
+        item.targetLocationId,
+        item.quantity,
+        item.batchNo,
+        new Date().toISOString().split('T')[0]
+      );
+    });
+  } else if (status === 'in_transit') {
+    order.items.forEach((item) => {
+      removeInventory(item.productId, item.sourceLocationId, item.quantity, item.batchNo);
+    });
+  }
+
+  return order;
+};
+
+createTransferOrder(
+  '1',
+  '2',
+  'completed',
+  [{ productId: '1', quantity: 10, batchNo: 'BATCH20240515' }],
+  '2024-05-20 10:00:00',
+  '2024-05-20 10:30:00',
+  '张三'
+);
+
+createTransferOrder(
+  '5',
+  '6',
+  'in_transit',
+  [{ productId: '2', quantity: 30, batchNo: 'BATCH20240516' }],
+  '2024-06-03 09:00:00',
+  '2024-06-03 09:15:00',
+  '李四'
+);
+
+createTransferOrder(
+  '10',
+  '11',
+  'pending',
+  [{ productId: '5', quantity: 15, batchNo: 'BATCH20240520' }],
+  '2024-06-04 14:00:00',
+  '2024-06-04 14:00:00'
+);

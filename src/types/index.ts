@@ -161,6 +161,34 @@ export interface StocktakeItem {
   batchNo: string;
 }
 
+export interface TransferItem {
+  id: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  quantity: number;
+  batchNo: string;
+  sourceLocationId: string;
+  sourceLocationCode: string;
+  targetLocationId: string;
+  targetLocationCode: string;
+}
+
+export interface TransferOrder {
+  id: string;
+  orderNo: string;
+  sourceLocationId: string;
+  sourceLocationCode: string;
+  targetLocationId: string;
+  targetLocationCode: string;
+  status: 'pending' | 'in_transit' | 'completed' | 'cancelled';
+  items: TransferItem[];
+  createTime: string;
+  updateTime: string;
+  operator?: string;
+  remark?: string;
+}
+
 export interface ReportData {
   inboundTrend: { date: string; count: number }[];
   outboundTrend: { date: string; count: number }[];

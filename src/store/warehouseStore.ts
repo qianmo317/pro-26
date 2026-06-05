@@ -10,6 +10,7 @@ import type {
   Product,
   ReportData,
   CustomerStats,
+  TransferOrder,
 } from '../types';
 import {
   mockSuppliers,
@@ -21,6 +22,7 @@ import {
   mockStocktakePlans,
   mockProducts,
   mockReportData,
+  mockTransferOrders,
 } from '../mock/data';
 
 export interface InventorySummary {
@@ -46,6 +48,7 @@ interface WarehouseState {
   stocktakePlans: StocktakePlan[];
   products: Product[];
   reportData: ReportData;
+  transferOrders: TransferOrder[];
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
@@ -63,6 +66,10 @@ interface WarehouseState {
   getInventorySummary: () => InventorySummary[];
   getLowStockCount: () => number;
   getOverstockCount: () => number;
+  addTransferOrder: (order: TransferOrder) => void;
+  updateTransferOrder: (id: string, order: Partial<TransferOrder>) => void;
+  startTransfer: (id: string) => void;
+  completeTransfer: (id: string) => void;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -75,6 +82,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   stocktakePlans: mockStocktakePlans,
   products: mockProducts,
   reportData: mockReportData,
+  transferOrders: mockTransferOrders,
 
   addSupplier: (supplier) =>
     set((state) => ({
@@ -249,5 +257,122 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   getOverstockCount: () => {
     const summary = get().getInventorySummary();
     return summary.filter((s) => s.stockStatus === 'overstock').length;
+  },
+
+  addTransferOrder: (order) =>
+    set((state) => ({
+      transferOrders: [...state.transferOrders, order],
+    })),
+
+  updateTransferOrder: (id, order) =>
+    set((state) => ({
+      transferOrders: state.transferOrders.map((o) =>
+        o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
+      ),
+    })),
+
+  startTransfer: (id) => {
+    const state = get();
+    const order = state.transferOrders.find((o) => o.id === id);
+    if (!order || order.status !== 'pending') return;
+
+    const newInventory = [...state.inventory];
+    const newLocations = [...state.locations];
+
+    order.items.forEach((item) => {
+      const invIndex = newInventory.findIndex(
+        (inv) =>
+          inv.productId === item.productId &&
+          inv.locationId === item.sourceLocationId &&
+          inv.batchNo === item.batchNo
+      );
+
+      if (invIndex > -1) {
+        const inv = newInventory[invIndex];
+        if (inv.quantity >= item.quantity) {
+          inv.quantity -= item.quantity;
+          inv.updateTime = new Date().toLocaleString();
+
+          if (inv.quantity <= 0) {
+            newInventory.splice(invIndex, 1);
+          }
+
+          const locIndex = newLocations.findIndex((l) => l.id === item.sourceLocationId);
+          if (locIndex > -1) {
+            const loc = newLocations[locIndex];
+            loc.current -= item.quantity;
+            loc.status =
+              loc.current === 0 ? 'empty' : loc.current >= loc.capacity ? 'full' : 'normal';
+          }
+        }
+      }
+    });
+
+    set((state) => ({
+      inventory: newInventory,
+      locations: newLocations,
+      transferOrders: state.transferOrders.map((o) =>
+        o.id === id
+          ? { ...o, status: 'in_transit' as const, updateTime: new Date().toLocaleString() }
+          : o
+      ),
+    }));
+  },
+
+  completeTransfer: (id) => {
+    const state = get();
+    const order = state.transferOrders.find((o) => o.id === id);
+    if (!order || order.status !== 'in_transit') return;
+
+    const newInventory = [...state.inventory];
+    const newLocations = [...state.locations];
+
+    order.items.forEach((item) => {
+      const existingInv = newInventory.find(
+        (inv) =>
+          inv.productId === item.productId &&
+          inv.locationId === item.targetLocationId &&
+          inv.batchNo === item.batchNo
+      );
+
+      if (existingInv) {
+        existingInv.quantity += item.quantity;
+        existingInv.updateTime = new Date().toLocaleString();
+      } else {
+        const product = state.products.find((p) => p.id === item.productId);
+        if (product) {
+          newInventory.push({
+            id: String(Date.now() + Math.random()),
+            productId: item.productId,
+            productName: item.productName,
+            productSku: item.productSku,
+            locationId: item.targetLocationId,
+            locationCode: item.targetLocationCode,
+            quantity: item.quantity,
+            batchNo: item.batchNo,
+            productionDate: new Date().toISOString().split('T')[0],
+            updateTime: new Date().toLocaleString(),
+          });
+        }
+      }
+
+      const locIndex = newLocations.findIndex((l) => l.id === item.targetLocationId);
+      if (locIndex > -1) {
+        const loc = newLocations[locIndex];
+        loc.current += item.quantity;
+        loc.status =
+          loc.current === 0 ? 'empty' : loc.current >= loc.capacity ? 'full' : 'normal';
+      }
+    });
+
+    set((state) => ({
+      inventory: newInventory,
+      locations: newLocations,
+      transferOrders: state.transferOrders.map((o) =>
+        o.id === id
+          ? { ...o, status: 'completed' as const, updateTime: new Date().toLocaleString() }
+          : o
+      ),
+    }));
   },
 }));

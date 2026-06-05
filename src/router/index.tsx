@@ -5,6 +5,7 @@ import Login from '../pages/Login';
 import Dashboard from '../pages/Dashboard';
 import Inbound from '../pages/Inbound';
 import Outbound from '../pages/Outbound';
+import Transfer from '../pages/Transfer';
 import Location from '../pages/Location';
 import Inventory from '../pages/Inventory';
 import Stocktake from '../pages/Stocktake';
@@ -50,6 +51,10 @@ export const router = createBrowserRouter([
       {
         path: 'outbound',
         element: <Outbound />,
+      },
+      {
+        path: 'transfer',
+        element: <Transfer />,
       },
       {
         path: 'location',
