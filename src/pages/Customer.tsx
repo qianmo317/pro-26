@@ -32,7 +32,9 @@ const { Option } = Select;
 
 export default function Customer() {
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailVisible, setDetailVisible] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [form] = Form.useForm();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentTermsFilter, setPaymentTermsFilter] = useState<string>('all');
@@ -60,11 +62,15 @@ export default function Customer() {
     {
       title: '公司名称',
       dataIndex: 'companyName',
+      width: 240,
+      ellipsis: true,
       render: (text: string, record: Customer) => {
         const stats = getCustomerStats(record.id);
         return (
-          <div>
-            <div>{text}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {text}
+            </div>
             <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
               累计出库: <span style={{ color: '#ff7d00', fontWeight: '500' }}>¥{stats.totalOutboundAmount.toLocaleString()}</span>
             </div>
@@ -125,17 +131,18 @@ export default function Customer() {
     },
     {
       title: '操作',
-      width: 180,
+      width: 220,
+      fixed: 'right' as const,
       render: (_: unknown, record: Customer) => (
-        <Space>
-          <Tooltip content="查看详情">
-            <Button
-              type="text"
-              size="small"
-              icon={<IconInfoCircle />}
-              onClick={() => handleViewDetail(record)}
-            />
-          </Tooltip>
+        <Space size="mini">
+          <Button
+            type="text"
+            size="small"
+            icon={<IconInfoCircle />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
           <Button
             type="text"
             size="small"
@@ -159,53 +166,8 @@ export default function Customer() {
   ];
 
   const handleViewDetail = (customer: Customer) => {
-    const stats = getCustomerStats(customer.id);
-    Modal.info({
-      title: '客户详情',
-      style: { width: 500 },
-      content: (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>客户编码</div>
-            <div style={{ fontWeight: '500' }}>{customer.code}</div>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>公司名称</div>
-            <div style={{ fontWeight: '500' }}>{customer.companyName}</div>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>联系人</div>
-            <div style={{ fontWeight: '500' }}>{customer.contact}</div>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>联系电话</div>
-            <div style={{ fontWeight: '500' }}>{customer.phone}</div>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>收货地址</div>
-            <div style={{ fontWeight: '500' }}>{customer.shippingAddress}</div>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>账期</div>
-            <div style={{ fontWeight: '500' }}>{customer.paymentTerms}天</div>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>合作状态</div>
-            <Tag color={customer.status === 'active' ? 'green' : 'gray'}>
-              {customer.status === 'active' ? '正常合作' : '已停用'}
-            </Tag>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>历史出库总金额</div>
-            <div style={{ fontWeight: '500', color: '#ff7d00' }}>¥{stats.totalOutboundAmount.toLocaleString()}</div>
-          </div>
-          <div>
-            <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>最近出库时间</div>
-            <div style={{ fontWeight: '500' }}>{stats.lastOutboundTime}</div>
-          </div>
-        </div>
-      ),
-    });
+    setViewingCustomer(customer);
+    setDetailVisible(true);
   };
 
   const handleAdd = () => {
@@ -386,6 +348,65 @@ export default function Customer() {
             <Input placeholder="请输入详细收货地址" />
           </FormItem>
         </Form>
+      </Modal>
+
+      <Modal
+        title="客户详情"
+        visible={detailVisible}
+        onOk={() => setDetailVisible(false)}
+        onCancel={() => setDetailVisible(false)}
+        style={{ width: 600 }}
+        footer={null}
+      >
+        {viewingCustomer && (
+          <div>
+            {(() => {
+              const stats = getCustomerStats(viewingCustomer.id);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>客户编码</div>
+                    <div style={{ fontWeight: '500' }}>{viewingCustomer.code}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>公司名称</div>
+                    <div style={{ fontWeight: '500' }}>{viewingCustomer.companyName}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>联系人</div>
+                    <div style={{ fontWeight: '500' }}>{viewingCustomer.contact}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>联系电话</div>
+                    <div style={{ fontWeight: '500' }}>{viewingCustomer.phone}</div>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>收货地址</div>
+                    <div style={{ fontWeight: '500' }}>{viewingCustomer.shippingAddress}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>账期</div>
+                    <div style={{ fontWeight: '500' }}>{viewingCustomer.paymentTerms}天</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>合作状态</div>
+                    <Tag color={viewingCustomer.status === 'active' ? 'green' : 'gray'}>
+                      {viewingCustomer.status === 'active' ? '正常合作' : '已停用'}
+                    </Tag>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>历史出库总金额</div>
+                    <div style={{ fontWeight: '500', color: '#ff7d00' }}>¥{stats.totalOutboundAmount.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>最近出库时间</div>
+                    <div style={{ fontWeight: '500' }}>{stats.lastOutboundTime}</div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </Modal>
     </div>
   );
