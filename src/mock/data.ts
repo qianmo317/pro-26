@@ -196,7 +196,8 @@ const addInventory = (
   locationId: string,
   quantity: number,
   batchNo: string,
-  productionDate: string
+  productionDate: string,
+  expirationDate?: string
 ) => {
   const product = getProductById(productId);
   const location = getLocationById(locationId);
@@ -219,6 +220,7 @@ const addInventory = (
       quantity,
       batchNo,
       productionDate,
+      expirationDate,
       updateTime: new Date().toISOString(),
     });
   }
@@ -264,6 +266,7 @@ const createInboundOrder = (
     locationId?: string;
     batchNo: string;
     productionDate: string;
+    expirationDate?: string;
   }>,
   createTime: string,
   updateTime: string,
@@ -288,6 +291,7 @@ const createInboundOrder = (
         locationCode: item.locationId ? getLocationById(item.locationId)?.code : undefined,
         batchNo: item.batchNo,
         productionDate: item.productionDate,
+        expirationDate: item.expirationDate,
       };
     }),
     createTime,
@@ -300,7 +304,7 @@ const createInboundOrder = (
   if (status === 'completed') {
     order.items.forEach((item) => {
       if (item.locationId && item.actualQuantity > 0) {
-        addInventory(item.productId, item.locationId, item.actualQuantity, item.batchNo, item.productionDate);
+        addInventory(item.productId, item.locationId, item.actualQuantity, item.batchNo, item.productionDate, item.expirationDate);
       }
     });
   }
@@ -313,7 +317,7 @@ createInboundOrder(
   '供应商A',
   'pending',
   [
-    { productId: '1', planQuantity: 100, actualQuantity: 0, batchNo: 'BATCH20240601', productionDate: '2024-06-01' },
+    { productId: '1', planQuantity: 100, actualQuantity: 0, batchNo: 'BATCH20240601', productionDate: '2024-06-01', expirationDate: '2026-06-01' },
   ],
   '2024-06-01 09:00:00',
   '2024-06-01 09:00:00'
@@ -324,8 +328,8 @@ createInboundOrder(
   '供应商B',
   'in_progress',
   [
-    { productId: '3', planQuantity: 20, actualQuantity: 15, batchNo: 'BATCH20240602', productionDate: '2024-06-02' },
-    { productId: '7', planQuantity: 10, actualQuantity: 10, batchNo: 'BATCH20240602', productionDate: '2024-06-02' },
+    { productId: '3', planQuantity: 20, actualQuantity: 15, batchNo: 'BATCH20240602', productionDate: '2024-06-02', expirationDate: '2026-06-02' },
+    { productId: '7', planQuantity: 10, actualQuantity: 10, batchNo: 'BATCH20240602', productionDate: '2024-06-02', expirationDate: '2026-06-02' },
   ],
   '2024-06-02 10:30:00',
   '2024-06-02 14:00:00',
@@ -344,6 +348,7 @@ createInboundOrder(
       locationId: '10',
       batchNo: 'BATCH20240520',
       productionDate: '2024-05-20',
+      expirationDate: '2025-05-20',
     },
   ],
   '2024-05-20 08:00:00',
@@ -363,6 +368,7 @@ createInboundOrder(
       locationId: '1',
       batchNo: 'BATCH20240515',
       productionDate: '2024-05-15',
+      expirationDate: '2025-07-15',
     },
     {
       productId: '2',
@@ -371,6 +377,7 @@ createInboundOrder(
       locationId: '5',
       batchNo: 'BATCH20240516',
       productionDate: '2024-05-16',
+      expirationDate: '2026-05-16',
     },
   ],
   '2024-05-16 09:00:00',
@@ -390,6 +397,7 @@ createInboundOrder(
       locationId: '15',
       batchNo: 'BATCH20240510',
       productionDate: '2024-05-10',
+      expirationDate: '2026-05-10',
     },
     {
       productId: '6',
@@ -398,6 +406,7 @@ createInboundOrder(
       locationId: '20',
       batchNo: 'BATCH20240512',
       productionDate: '2024-05-12',
+      expirationDate: '2025-06-12',
     },
     {
       productId: '8',
@@ -406,6 +415,7 @@ createInboundOrder(
       locationId: '25',
       batchNo: 'BATCH20240514',
       productionDate: '2024-05-14',
+      expirationDate: '2025-05-14',
     },
   ],
   '2024-05-14 10:00:00',
@@ -679,13 +689,20 @@ const createTransferOrder = (
 
   if (status === 'completed') {
     order.items.forEach((item) => {
+      const sourceInv = mockInventory.find(
+        (inv) =>
+          inv.productId === item.productId &&
+          inv.locationId === item.sourceLocationId &&
+          inv.batchNo === item.batchNo
+      );
       removeInventory(item.productId, item.sourceLocationId, item.quantity, item.batchNo);
       addInventory(
         item.productId,
         item.targetLocationId,
         item.quantity,
         item.batchNo,
-        new Date().toISOString().split('T')[0]
+        sourceInv?.productionDate || new Date().toISOString().split('T')[0],
+        sourceInv?.expirationDate
       );
     });
   } else if (status === 'in_transit') {

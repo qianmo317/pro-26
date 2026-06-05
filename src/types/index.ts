@@ -210,6 +210,78 @@ export interface AuthState {
   logout: () => void;
 }
 
+export interface BatchTraceEvent {
+  type: 'inbound' | 'outbound' | 'transfer' | 'stocktake';
+  time: string;
+  description: string;
+  orderNo?: string;
+  locationCode?: string;
+  quantity: number;
+  operator?: string;
+  remark?: string;
+}
+
+export interface BatchTraceData {
+  batchNo: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  category: string;
+  unit: string;
+  productionDate: string;
+  expirationDate?: string;
+  inboundOrder: {
+    orderNo: string;
+    supplier: string;
+    createTime: string;
+    operator?: string;
+    quantity: number;
+  } | null;
+  currentLocations: Array<{
+    locationCode: string;
+    quantity: number;
+  }>;
+  outboundRecords: Array<{
+    orderNo: string;
+    customer: string;
+    createTime: string;
+    locationCode: string;
+    quantity: number;
+    operator?: string;
+  }>;
+  transferRecords: Array<{
+    orderNo: string;
+    sourceLocation: string;
+    targetLocation: string;
+    createTime: string;
+    quantity: number;
+    operator?: string;
+    status: string;
+  }>;
+  timeline: BatchTraceEvent[];
+  totalInbound: number;
+  totalOutbound: number;
+  remainingQuantity: number;
+}
+
+export interface InventoryBatch {
+  productId: string;
+  productName: string;
+  productSku: string;
+  category: string;
+  unit: string;
+  batchNo: string;
+  productionDate: string;
+  expirationDate?: string;
+  totalQuantity: number;
+  locationCount: number;
+  locations: Array<{
+    locationCode: string;
+    quantity: number;
+  }>;
+  stockStatus: 'normal' | 'low' | 'overstock' | 'expired' | 'expiring';
+}
+
 export interface AppState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;

@@ -11,6 +11,9 @@ import type {
   ReportData,
   CustomerStats,
   TransferOrder,
+  InventoryBatch,
+  BatchTraceData,
+  BatchTraceEvent,
 } from '../types';
 import {
   mockSuppliers,
@@ -70,6 +73,8 @@ interface WarehouseState {
   updateTransferOrder: (id: string, order: Partial<TransferOrder>) => void;
   startTransfer: (id: string) => void;
   completeTransfer: (id: string) => void;
+  getInventoryBatches: () => InventoryBatch[];
+  getBatchTraceData: (batchNo: string) => BatchTraceData | null;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -340,6 +345,12 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
         existingInv.updateTime = new Date().toLocaleString();
       } else {
         const product = state.products.find((p) => p.id === item.productId);
+        const sourceInv = state.inventory.find(
+          (inv) =>
+            inv.productId === item.productId &&
+            inv.locationId === item.sourceLocationId &&
+            inv.batchNo === item.batchNo
+        );
         if (product) {
           newInventory.push({
             id: String(Date.now() + Math.random()),
@@ -350,7 +361,8 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
             locationCode: item.targetLocationCode,
             quantity: item.quantity,
             batchNo: item.batchNo,
-            productionDate: new Date().toISOString().split('T')[0],
+            productionDate: sourceInv?.productionDate || new Date().toISOString().split('T')[0],
+            expirationDate: sourceInv?.expirationDate,
             updateTime: new Date().toLocaleString(),
           });
         }
@@ -374,5 +386,212 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
           : o
       ),
     }));
+  },
+
+  getInventoryBatches: () => {
+    const state = get();
+    const batchMap = new Map<string, InventoryBatch>();
+
+    state.inventory.forEach((inv) => {
+      const key = `${inv.productId}-${inv.batchNo}`;
+      const existing = batchMap.get(key);
+      if (existing) {
+        existing.totalQuantity += inv.quantity;
+        existing.locations.push({
+          locationCode: inv.locationCode,
+          quantity: inv.quantity,
+        });
+        existing.locationCount = existing.locations.length;
+      } else {
+        const product = state.products.find((p) => p.id === inv.productId);
+        if (product) {
+          let stockStatus: InventoryBatch['stockStatus'] = 'normal';
+          if (inv.expirationDate) {
+            const now = new Date();
+            const expDate = new Date(inv.expirationDate);
+            const diffDays = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) {
+              stockStatus = 'expired';
+            } else if (diffDays <= 30) {
+              stockStatus = 'expiring';
+            }
+          }
+          if (stockStatus === 'normal') {
+            if (inv.quantity < product.safetyStockMin) {
+              stockStatus = 'low';
+            } else if (inv.quantity > product.safetyStockMax) {
+              stockStatus = 'overstock';
+            }
+          }
+
+          batchMap.set(key, {
+            productId: inv.productId,
+            productName: inv.productName,
+            productSku: inv.productSku,
+            category: product.category,
+            unit: product.unit,
+            batchNo: inv.batchNo,
+            productionDate: inv.productionDate,
+            expirationDate: inv.expirationDate,
+            totalQuantity: inv.quantity,
+            locationCount: 1,
+            locations: [
+              {
+                locationCode: inv.locationCode,
+                quantity: inv.quantity,
+              },
+            ],
+            stockStatus,
+          });
+        }
+      }
+    });
+
+    return Array.from(batchMap.values());
+  },
+
+  getBatchTraceData: (batchNo: string) => {
+    const state = get();
+    const inventoryItems = state.inventory.filter((inv) => inv.batchNo === batchNo);
+
+    if (inventoryItems.length === 0) {
+      return null;
+    }
+
+    const firstItem = inventoryItems[0];
+    const product = state.products.find((p) => p.id === firstItem.productId);
+    if (!product) return null;
+
+    const timeline: BatchTraceEvent[] = [];
+    let totalInbound = 0;
+    let totalOutbound = 0;
+
+    let inboundOrder: BatchTraceData['inboundOrder'] = null;
+    for (const order of state.inboundOrders) {
+      for (const item of order.items) {
+        if (item.batchNo === batchNo && item.actualQuantity > 0) {
+          inboundOrder = {
+            orderNo: order.orderNo,
+            supplier: order.supplier,
+            createTime: order.createTime,
+            operator: order.operator,
+            quantity: item.actualQuantity,
+          };
+          totalInbound += item.actualQuantity;
+          timeline.push({
+            type: 'inbound',
+            time: order.createTime,
+            description: `从 ${order.supplier} 入库`,
+            orderNo: order.orderNo,
+            locationCode: item.locationCode,
+            quantity: item.actualQuantity,
+            operator: order.operator,
+          });
+        }
+      }
+    }
+
+    const outboundRecords: BatchTraceData['outboundRecords'] = [];
+    for (const order of state.outboundOrders) {
+      for (const item of order.items) {
+        if (item.batchNo === batchNo && item.actualQuantity > 0) {
+          outboundRecords.push({
+            orderNo: order.orderNo,
+            customer: order.customer,
+            createTime: order.createTime,
+            locationCode: item.locationCode || '-',
+            quantity: item.actualQuantity,
+            operator: order.operator,
+          });
+          totalOutbound += item.actualQuantity;
+          timeline.push({
+            type: 'outbound',
+            time: order.createTime,
+            description: `出库至 ${order.customer}`,
+            orderNo: order.orderNo,
+            locationCode: item.locationCode,
+            quantity: item.actualQuantity,
+            operator: order.operator,
+          });
+        }
+      }
+    }
+
+    const transferRecords: BatchTraceData['transferRecords'] = [];
+    for (const order of state.transferOrders) {
+      for (const item of order.items) {
+        if (item.batchNo === batchNo) {
+          const statusMap: Record<string, string> = {
+            pending: '待处理',
+            in_transit: '运输中',
+            completed: '已完成',
+            cancelled: '已取消',
+          };
+          transferRecords.push({
+            orderNo: order.orderNo,
+            sourceLocation: item.sourceLocationCode,
+            targetLocation: item.targetLocationCode,
+            createTime: order.createTime,
+            quantity: item.quantity,
+            operator: order.operator,
+            status: statusMap[order.status] || order.status,
+          });
+          timeline.push({
+            type: 'transfer',
+            time: order.createTime,
+            description: `从 ${item.sourceLocationCode} 移库至 ${item.targetLocationCode}`,
+            orderNo: order.orderNo,
+            quantity: item.quantity,
+            operator: order.operator,
+            remark: statusMap[order.status],
+          });
+        }
+      }
+    }
+
+    for (const plan of state.stocktakePlans) {
+      for (const item of plan.items) {
+        if (item.batchNo === batchNo && item.status === 'counted') {
+          timeline.push({
+            type: 'stocktake',
+            time: plan.startTime || plan.createTime,
+            description: `盘点: ${plan.name}`,
+            orderNo: plan.planNo,
+            locationCode: item.locationCode,
+            quantity: item.diffQuantity,
+            operator: plan.operator,
+            remark: `系统: ${item.systemQuantity}, 实际: ${item.actualQuantity}, 差异: ${item.diffQuantity > 0 ? '+' : ''}${item.diffQuantity}`,
+          });
+        }
+      }
+    }
+
+    timeline.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+    const currentLocations = inventoryItems.map((inv) => ({
+      locationCode: inv.locationCode,
+      quantity: inv.quantity,
+    }));
+
+    const remainingQuantity = currentLocations.reduce((sum, loc) => sum + loc.quantity, 0);
+
+    return {
+      batchNo,
+      productId: firstItem.productId,
+      productName: firstItem.productName,
+      productSku: firstItem.productSku,
+      category: product.category,
+      unit: product.unit,
+      productionDate: firstItem.productionDate,
+      expirationDate: firstItem.expirationDate,
+      inboundOrder,
+      currentLocations,
+      outboundRecords,
+      transferRecords,
+      timeline,
+      totalInbound,
+      totalOutbound,
+      remainingQuantity,
+    };
   },
 }));
