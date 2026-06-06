@@ -183,8 +183,12 @@ export default function Inbound() {
   };
 
   const handleCompleteInbound = (id: string) => {
-    updateInboundOrder(id, { status: 'completed' });
-    toast.success('入库完成');
+    try {
+      updateInboundOrder(id, { status: 'completed' });
+      toast.success('入库完成');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '入库失败');
+    }
   };
 
   const handleSubmit = (values: InboundFormValues) => {

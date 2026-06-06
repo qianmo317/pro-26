@@ -60,6 +60,9 @@ export interface Location {
   status: 'empty' | 'normal' | 'full' | 'locked';
   capacity: number;
   current: number;
+  lockReason?: string;
+  lockOperator?: string;
+  lockTime?: string;
 }
 
 export interface LocationActivity {

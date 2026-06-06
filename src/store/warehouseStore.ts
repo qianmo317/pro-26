@@ -132,6 +132,9 @@ interface WarehouseState {
     reviewRemark?: string
   ) => void;
   getPendingReviewOrders: () => OutboundOrder[];
+  lockLocations: (locationIds: string[], reason: string, operator: string) => number;
+  unlockLocations: (locationIds: string[], reason: string, operator: string) => number;
+  isLocationLocked: (locationId: string) => boolean;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -223,12 +226,26 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     }));
   },
 
-  updateInboundOrder: (id, order) =>
+  updateInboundOrder: (id, order) => {
+    const state = get();
+    const existingOrder = state.inboundOrders.find((o) => o.id === id);
+    if (!existingOrder) return;
+
+    if (order.status === 'completed') {
+      for (const item of existingOrder.items) {
+        if (item.locationId && state.isLocationLocked(item.locationId)) {
+          const loc = state.locations.find((l) => l.id === item.locationId);
+          throw new Error(`库位 ${loc?.code || item.locationId} 已被锁定，禁止入库。原因：${loc?.lockReason || '无'}`);
+        }
+      }
+    }
+
     set((state) => ({
       inboundOrders: state.inboundOrders.map((o) =>
-        o.id === id ? { ...o, ...order } : o
+        o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
       ),
-    })),
+    }));
+  },
 
   addOutboundOrder: (order) => {
     useAppStore.getState().addNotification({
@@ -1155,5 +1172,61 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   getPendingReviewOrders: () => {
     const state = get();
     return state.outboundOrders.filter((o) => o.status === 'pending_review');
+  },
+
+  lockLocations: (locationIds, reason, operator) => {
+    const state = get();
+    const now = new Date().toLocaleString();
+    let updatedCount = 0;
+
+    const newLocations = state.locations.map((loc) => {
+      if (locationIds.includes(loc.id) && loc.status !== 'locked') {
+        updatedCount++;
+        return {
+          ...loc,
+          status: 'locked' as const,
+          lockReason: reason,
+          lockOperator: operator,
+          lockTime: now,
+        };
+      }
+      return loc;
+    });
+
+    set({ locations: newLocations });
+    return updatedCount;
+  },
+
+  unlockLocations: (locationIds, _reason, _operator) => {
+    const state = get();
+    let updatedCount = 0;
+
+    const newLocations = state.locations.map((loc) => {
+      if (locationIds.includes(loc.id) && loc.status === 'locked') {
+        updatedCount++;
+        const newStatus = loc.current === 0
+          ? 'empty' as const
+          : loc.current >= loc.capacity
+          ? 'full' as const
+          : 'normal' as const;
+        return {
+          ...loc,
+          status: newStatus,
+          lockReason: undefined,
+          lockOperator: undefined,
+          lockTime: undefined,
+        };
+      }
+      return loc;
+    });
+
+    set({ locations: newLocations });
+    return updatedCount;
+  },
+
+  isLocationLocked: (locationId) => {
+    const state = get();
+    const loc = state.locations.find((l) => l.id === locationId);
+    return loc?.status === 'locked';
   },
 }));

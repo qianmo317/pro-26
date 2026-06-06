@@ -197,6 +197,28 @@ body {
   color: #f57c00;
 }
 
+.location-cell.selected {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px rgba(255, 125, 0, 0.3);
+}
+
+.location-cell.selected::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+}
+
 .login-container {
   min-height: 100vh;
   display: flex;
