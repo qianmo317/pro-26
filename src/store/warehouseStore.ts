@@ -31,6 +31,9 @@ import type {
   User,
   ABCAnalysisData,
   ABCAnalysisFilter,
+  StockDifferenceItem,
+  StockAdjustmentOrder,
+  StockAdjustmentItem,
 } from '../types';
 import {
   mockSuppliers,
@@ -46,6 +49,10 @@ import {
   mockLocationActivities,
   mockInventoryChangeRecords,
   mockCycleCountConfigs,
+  mockStockDifferenceItems,
+  mockStockAdjustmentOrders,
+  LARGE_DIFF_THRESHOLD,
+  generateDifferenceItemsFromPlan,
   getABCClass,
   generateStockAgeData,
   generateABCAnalysisData,
@@ -79,6 +86,9 @@ interface WarehouseState {
   locationActivities: LocationActivity[];
   inventoryChangeRecords: InventoryChangeRecord[];
   cycleCountConfigs: CycleCountConfig[];
+  stockDifferenceItems: StockDifferenceItem[];
+  stockAdjustmentOrders: StockAdjustmentOrder[];
+  largeDiffThreshold: number;
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
@@ -92,6 +102,15 @@ interface WarehouseState {
   updateOutboundOrder: (id: string, order: Partial<OutboundOrder>) => void;
   updateStocktakeItem: (planId: string, itemId: string, actual: number) => void;
   completeStocktake: (planId: string) => void;
+  getDifferenceItemsByPlan: (planId: string) => StockDifferenceItem[];
+  getPendingDifferenceItems: () => StockDifferenceItem[];
+  confirmDifferenceItem: (id: string, operator: string, remark?: string) => void;
+  ignoreDifferenceItem: (id: string, operator: string, remark?: string) => void;
+  createStockAdjustmentOrder: (planId: string, differenceItemIds: string[], operator: string, remark?: string) => StockAdjustmentOrder | null;
+  confirmStockAdjustmentOrder: (orderId: string, confirmer: string, remark?: string) => void;
+  completeStockAdjustmentOrder: (orderId: string, operator: string) => void;
+  cancelStockAdjustmentOrder: (orderId: string, operator: string, remark?: string) => void;
+  getStockAdjustmentOrdersByPlan: (planId: string) => StockAdjustmentOrder[];
   updateProductSafetyStock: (id: string, safetyStockMin: number, safetyStockMax: number) => void;
   getInventorySummary: () => InventorySummary[];
   getLowStockCount: () => number;
@@ -156,6 +175,9 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   locationActivities: mockLocationActivities,
   inventoryChangeRecords: mockInventoryChangeRecords,
   cycleCountConfigs: mockCycleCountConfigs,
+  stockDifferenceItems: mockStockDifferenceItems,
+  stockAdjustmentOrders: mockStockAdjustmentOrders,
+  largeDiffThreshold: LARGE_DIFF_THRESHOLD,
 
   addSupplier: (supplier) =>
     set((state) => ({
@@ -292,14 +314,280 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       ),
     })),
 
-  completeStocktake: (planId) =>
+  completeStocktake: (planId) => {
+    const state = get();
+    const plan = state.stocktakePlans.find((p) => p.id === planId);
+    if (!plan) return;
+
+    const newDifferenceItems = generateDifferenceItemsFromPlan({
+      ...plan,
+      status: 'completed',
+      endTime: new Date().toISOString(),
+    });
+
     set((state) => ({
       stocktakePlans: state.stocktakePlans.map((plan) =>
         plan.id === planId
           ? { ...plan, status: 'completed', endTime: new Date().toISOString() }
           : plan
       ),
-    })),
+      stockDifferenceItems: [...state.stockDifferenceItems, ...newDifferenceItems],
+    }));
+
+    if (newDifferenceItems.length > 0) {
+      useAppStore.getState().addNotification({
+        type: 'stocktake',
+        title: '盘点差异待处理',
+        orderNo: plan.planNo,
+        message: `发现 ${newDifferenceItems.length} 项差异，其中 ${newDifferenceItems.filter((d) => d.isLargeDiff).length} 项差异较大`,
+      });
+    }
+  },
+
+  getDifferenceItemsByPlan: (planId) => {
+    return get().stockDifferenceItems.filter((item) => item.stocktakePlanId === planId);
+  },
+
+  getPendingDifferenceItems: () => {
+    return get().stockDifferenceItems.filter((item) => item.status === 'pending');
+  },
+
+  confirmDifferenceItem: (id, operator, remark) => {
+    const now = new Date().toLocaleString();
+    set((state) => ({
+      stockDifferenceItems: state.stockDifferenceItems.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: 'confirmed',
+              confirmedBy: operator,
+              confirmedTime: now,
+              remark: remark || item.remark,
+            }
+          : item
+      ),
+    }));
+  },
+
+  ignoreDifferenceItem: (id, operator, remark) => {
+    const now = new Date().toLocaleString();
+    set((state) => ({
+      stockDifferenceItems: state.stockDifferenceItems.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: 'ignored',
+              confirmedBy: operator,
+              confirmedTime: now,
+              remark: remark || item.remark,
+            }
+          : item
+      ),
+    }));
+  },
+
+  createStockAdjustmentOrder: (planId, differenceItemIds, operator, remark) => {
+    const state = get();
+    const plan = state.stocktakePlans.find((p) => p.id === planId);
+    if (!plan) return null;
+
+    const selectedItems = state.stockDifferenceItems.filter(
+      (item) =>
+        item.stocktakePlanId === planId &&
+        differenceItemIds.includes(item.id) &&
+        (item.status === 'pending' || item.status === 'confirmed')
+    );
+
+    if (selectedItems.length === 0) return null;
+
+    const hasLargeDiff = selectedItems.some((item) => item.isLargeDiff);
+    const largeDiffCount = selectedItems.filter((item) => item.isLargeDiff).length;
+
+    const now = new Date().toLocaleString();
+    const orderNo = `ADJ${Date.now()}`;
+
+    const adjustmentItems: StockAdjustmentItem[] = selectedItems.map((item, idx) => ({
+      id: `${orderNo}-${idx + 1}`,
+      differenceItemId: item.id,
+      productId: item.productId,
+      productName: item.productName,
+      productSku: item.productSku,
+      locationId: item.locationId,
+      locationCode: item.locationCode,
+      batchNo: item.batchNo,
+      systemQuantity: item.systemQuantity,
+      actualQuantity: item.actualQuantity,
+      adjustQuantity: item.diffQuantity,
+    }));
+
+    const newOrder: StockAdjustmentOrder = {
+      id: orderNo,
+      orderNo,
+      stocktakePlanId: planId,
+      stocktakePlanNo: plan.planNo,
+      status: hasLargeDiff ? 'pending_confirm' : 'draft',
+      items: adjustmentItems,
+      totalAdjustCount: selectedItems.length,
+      largeDiffCount,
+      createTime: now,
+      updateTime: now,
+      operator,
+      remark,
+    };
+
+    set((state) => ({
+      stockAdjustmentOrders: [...state.stockAdjustmentOrders, newOrder],
+      stockDifferenceItems: state.stockDifferenceItems.map((item) =>
+        differenceItemIds.includes(item.id)
+          ? { ...item, status: 'confirmed', adjustmentOrderId: orderNo }
+          : item
+      ),
+    }));
+
+    return newOrder;
+  },
+
+  confirmStockAdjustmentOrder: (orderId, confirmer, remark) => {
+    const now = new Date().toLocaleString();
+    set((state) => ({
+      stockAdjustmentOrders: state.stockAdjustmentOrders.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              status: 'confirmed',
+              confirmer,
+              confirmTime: now,
+              updateTime: now,
+              remark: remark || order.remark,
+            }
+          : order
+      ),
+    }));
+  },
+
+  completeStockAdjustmentOrder: (orderId, operator) => {
+    const state = get();
+    const order = state.stockAdjustmentOrders.find((o) => o.id === orderId);
+    if (!order) return;
+
+    const newInventory = [...state.inventory];
+    const newLocations = [...state.locations];
+    const newChangeRecords = [...state.inventoryChangeRecords];
+    const now = new Date().toLocaleString();
+    let recordId = newChangeRecords.length + 1;
+
+    order.items.forEach((item) => {
+      const invIndex = newInventory.findIndex(
+        (inv) =>
+          inv.productId === item.productId &&
+          inv.locationId === item.locationId &&
+          inv.batchNo === item.batchNo
+      );
+
+      if (invIndex > -1) {
+        const inv = newInventory[invIndex];
+        const oldQuantity = inv.quantity;
+        inv.quantity = item.actualQuantity;
+        inv.updateTime = now;
+
+        if (inv.quantity <= 0) {
+          newInventory.splice(invIndex, 1);
+        }
+
+        const locIndex = newLocations.findIndex((l) => l.id === item.locationId);
+        if (locIndex > -1) {
+          const loc = newLocations[locIndex];
+          loc.current = loc.current - oldQuantity + item.actualQuantity;
+          loc.status =
+            loc.current === 0
+              ? 'empty'
+              : loc.current >= loc.capacity
+              ? 'full'
+              : 'normal';
+        }
+
+        newChangeRecords.unshift({
+          id: String(recordId++),
+          type: 'adjust',
+          productId: item.productId,
+          productName: item.productName,
+          productSku: item.productSku,
+          locationId: item.locationId,
+          locationCode: item.locationCode,
+          batchNo: item.batchNo,
+          quantity: item.adjustQuantity,
+          balanceAfter: item.actualQuantity,
+          orderNo: order.orderNo,
+          operator,
+          operateTime: now,
+          remark: `盘点调整: 系统${item.systemQuantity} → 实际${item.actualQuantity}`,
+        });
+      }
+    });
+
+    const differenceItemIds = order.items.map((item) => item.differenceItemId);
+
+    set((state) => ({
+      inventory: newInventory,
+      locations: newLocations,
+      inventoryChangeRecords: newChangeRecords,
+      stockAdjustmentOrders: state.stockAdjustmentOrders.map((o) =>
+        o.id === orderId
+          ? { ...o, status: 'completed', completeTime: now, updateTime: now, operator }
+          : o
+      ),
+      stockDifferenceItems: state.stockDifferenceItems.map((item) =>
+        differenceItemIds.includes(item.id)
+          ? { ...item, status: 'adjusted' }
+          : item
+      ),
+      stocktakePlans: state.stocktakePlans.map((plan) =>
+        plan.id === order.stocktakePlanId
+          ? {
+              ...plan,
+              items: plan.items.map((planItem) => {
+                const adjustItem = order.items.find(
+                  (i) =>
+                    i.productId === planItem.productId &&
+                    i.locationId === planItem.locationId &&
+                    i.batchNo === planItem.batchNo
+                );
+                if (adjustItem) {
+                  return { ...planItem, status: 'adjusted' };
+                }
+                return planItem;
+              }),
+            }
+          : plan
+      ),
+    }));
+  },
+
+  cancelStockAdjustmentOrder: (orderId, _operator, remark) => {
+    const state = get();
+    const order = state.stockAdjustmentOrders.find((o) => o.id === orderId);
+    if (!order) return;
+
+    const now = new Date().toLocaleString();
+    const differenceItemIds = order.items.map((item) => item.differenceItemId);
+
+    set((state) => ({
+      stockAdjustmentOrders: state.stockAdjustmentOrders.map((o) =>
+        o.id === orderId
+          ? { ...o, status: 'cancelled', updateTime: now, remark: remark || o.remark }
+          : o
+      ),
+      stockDifferenceItems: state.stockDifferenceItems.map((item) =>
+        differenceItemIds.includes(item.id)
+          ? { ...item, status: 'pending', adjustmentOrderId: undefined }
+          : item
+      ),
+    }));
+  },
+
+  getStockAdjustmentOrdersByPlan: (planId) => {
+    return get().stockAdjustmentOrders.filter((order) => order.stocktakePlanId === planId);
+  },
 
   updateProductSafetyStock: (id, safetyStockMin, safetyStockMax) =>
     set((state) => ({

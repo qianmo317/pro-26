@@ -368,6 +368,61 @@ export interface InventoryChangeRecord {
   remark?: string;
 }
 
+export interface StockDifferenceItem {
+  id: string;
+  stocktakePlanId: string;
+  stocktakePlanNo: string;
+  stocktakeItemId: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  locationId: string;
+  locationCode: string;
+  batchNo: string;
+  systemQuantity: number;
+  actualQuantity: number;
+  diffQuantity: number;
+  diffRatio: number;
+  isLargeDiff: boolean;
+  status: 'pending' | 'confirmed' | 'adjusted' | 'ignored';
+  confirmedBy?: string;
+  confirmedTime?: string;
+  adjustmentOrderId?: string;
+  remark?: string;
+}
+
+export interface StockAdjustmentItem {
+  id: string;
+  differenceItemId: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  locationId: string;
+  locationCode: string;
+  batchNo: string;
+  systemQuantity: number;
+  actualQuantity: number;
+  adjustQuantity: number;
+}
+
+export interface StockAdjustmentOrder {
+  id: string;
+  orderNo: string;
+  stocktakePlanId: string;
+  stocktakePlanNo: string;
+  status: 'draft' | 'pending_confirm' | 'confirmed' | 'completed' | 'cancelled';
+  items: StockAdjustmentItem[];
+  totalAdjustCount: number;
+  largeDiffCount: number;
+  createTime: string;
+  updateTime: string;
+  operator?: string;
+  confirmer?: string;
+  confirmTime?: string;
+  completeTime?: string;
+  remark?: string;
+}
+
 export type CycleCountPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 export type CycleCountScope = 'zone' | 'category' | 'abc';
 export type ABCClass = 'A' | 'B' | 'C';

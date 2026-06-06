@@ -11,6 +11,8 @@ import type {
   ReportData,
   TransferOrder,
   LocationActivity,
+  StockDifferenceItem,
+  StockAdjustmentOrder,
 } from '../types';
 
 export const mockUser: User = {
@@ -1613,3 +1615,79 @@ export const generateABCAnalysisData = (
 };
 
 export const mockABCAnalysisData: ABCAnalysisData = generateABCAnalysisData();
+
+export const LARGE_DIFF_THRESHOLD = 20;
+
+export const mockStockDifferenceItems: StockDifferenceItem[] = [];
+export const mockStockAdjustmentOrders: StockAdjustmentOrder[] = [];
+
+const generateDifferenceItems = () => {
+  let diffId = 1;
+
+  mockStocktakePlans.forEach((plan) => {
+    plan.items
+      .filter((item) => item.diffQuantity !== 0)
+      .forEach((item) => {
+        const diffRatio = item.systemQuantity > 0
+          ? Math.abs(item.diffQuantity) / item.systemQuantity * 100
+          : item.diffQuantity !== 0 ? 100 : 0;
+        const isLargeDiff = diffRatio >= LARGE_DIFF_THRESHOLD || Math.abs(item.diffQuantity) >= 50;
+
+        mockStockDifferenceItems.push({
+          id: `DIFF-${diffId++}`,
+          stocktakePlanId: plan.id,
+          stocktakePlanNo: plan.planNo,
+          stocktakeItemId: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          productSku: item.productSku,
+          locationId: item.locationId,
+          locationCode: item.locationCode,
+          batchNo: item.batchNo,
+          systemQuantity: item.systemQuantity,
+          actualQuantity: item.actualQuantity,
+          diffQuantity: item.diffQuantity,
+          diffRatio: Math.round(diffRatio * 100) / 100,
+          isLargeDiff,
+          status: 'pending',
+        });
+      });
+  });
+};
+
+generateDifferenceItems();
+
+export const generateDifferenceItemsFromPlan = (plan: StocktakePlan): StockDifferenceItem[] => {
+  const items: StockDifferenceItem[] = [];
+  let diffId = Date.now();
+
+  plan.items
+    .filter((item) => item.diffQuantity !== 0)
+    .forEach((item) => {
+      const diffRatio = item.systemQuantity > 0
+        ? Math.abs(item.diffQuantity) / item.systemQuantity * 100
+        : item.diffQuantity !== 0 ? 100 : 0;
+      const isLargeDiff = diffRatio >= LARGE_DIFF_THRESHOLD || Math.abs(item.diffQuantity) >= 50;
+
+      items.push({
+        id: `DIFF-${diffId++}`,
+        stocktakePlanId: plan.id,
+        stocktakePlanNo: plan.planNo,
+        stocktakeItemId: item.id,
+        productId: item.productId,
+        productName: item.productName,
+        productSku: item.productSku,
+        locationId: item.locationId,
+        locationCode: item.locationCode,
+        batchNo: item.batchNo,
+        systemQuantity: item.systemQuantity,
+        actualQuantity: item.actualQuantity,
+        diffQuantity: item.diffQuantity,
+        diffRatio: Math.round(diffRatio * 100) / 100,
+        isLargeDiff,
+        status: 'pending',
+      });
+    });
+
+  return items;
+};

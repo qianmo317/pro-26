@@ -493,16 +493,21 @@ export default function Inbound() {
           rules={[
             { required: true, message: '请输入收货数量' },
             {
-              validator: (value: number) => {
-                if (value === undefined || value === null) return true;
+              validator: (value: number | undefined, callback) => {
+                if (value === undefined || value === null) {
+                  callback();
+                  return;
+                }
                 if (value < 0) {
-                  return { success: false, message: '数量不能为负' };
+                  callback('数量不能为负');
+                  return;
                 }
                 const remaining = record.planQuantity - record.receivedQuantity;
                 if (value > remaining) {
-                  return { success: false, message: `不能超过待收数量 ${remaining}` };
+                  callback(`不能超过待收数量 ${remaining}`);
+                  return;
                 }
-                return { success: true };
+                callback();
               },
             },
           ]}
