@@ -35,6 +35,7 @@ const Footer = ArcoLayout.Footer;
 
 const menuItems = [
   { key: 'dashboard', icon: <IconHome />, text: '数据总览' },
+  { key: 'task-board', icon: <IconApps />, text: '作业看板' },
   { key: 'inbound', icon: <IconImport />, text: '入库管理' },
   { key: 'outbound', icon: <IconExport />, text: '出库管理' },
   { key: 'transfer', icon: <IconSwap />, text: '库存调拨' },

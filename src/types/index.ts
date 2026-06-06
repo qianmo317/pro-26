@@ -203,7 +203,7 @@ export interface StocktakePlan {
   planNo: string;
   name: string;
   type: 'full' | 'partial' | 'cycle';
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   locationIds: string[];
   items: StocktakeItem[];
   createTime: string;
@@ -660,4 +660,39 @@ export interface InventorySnapshotData {
   increasedCount: number;
   decreasedCount: number;
   unchangedCount: number;
+}
+
+export type TaskType = 'inbound' | 'outbound' | 'stocktake';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface Task {
+  id: string;
+  type: TaskType;
+  orderNo: string;
+  title: string;
+  status: TaskStatus;
+  createTime: string;
+  updateTime: string;
+  operator?: string;
+  itemCount: number;
+  totalQuantity: number;
+  relatedParty: string;
+  remark?: string;
+}
+
+export interface TaskStats {
+  totalPending: number;
+  totalInProgress: number;
+  totalCompleted: number;
+  totalCancelled: number;
+  typeBreakdown: {
+    inbound: number;
+    outbound: number;
+    stocktake: number;
+  };
+  typeRatio: {
+    inbound: number;
+    outbound: number;
+    stocktake: number;
+  };
 }

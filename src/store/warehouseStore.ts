@@ -36,6 +36,12 @@ import type {
   StockAdjustmentItem,
   InventorySnapshotData,
   InventorySnapshotItem,
+  Task,
+  TaskStatus,
+  TaskStats,
+  InboundItem,
+  OutboundItem,
+  StocktakeItem,
 } from '../types';
 import {
   mockSuppliers,
@@ -164,6 +170,13 @@ interface WarehouseState {
   isLocationLocked: (locationId: string) => boolean;
   getInventorySnapshot: (targetDate: string) => InventorySnapshotData;
   exportInventorySnapshotToExcel: (data: InventorySnapshotData) => void;
+  getTasks: () => Task[];
+  getTaskStats: () => TaskStats;
+  updateTaskStatus: (taskId: string, taskType: Task['type'], newStatus: TaskStatus) => void;
+  getTaskDetail: (taskId: string, taskType: Task['type']) => {
+    order: InboundOrder | OutboundOrder | StocktakePlan | null;
+    items: (InboundItem | OutboundItem | StocktakeItem)[];
+  } | null;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -1724,5 +1737,252 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     XLSX.utils.book_append_sheet(wb, ws2, '汇总统计');
 
     XLSX.writeFile(wb, `库存快照_${data.snapshotDate}.xlsx`);
+  },
+
+  getTasks: () => {
+    const state = get();
+    const tasks: Task[] = [];
+
+    state.inboundOrders.forEach((order) => {
+      let status: TaskStatus;
+      if (order.status === 'cancelled') {
+        status = 'cancelled';
+      } else {
+        status = order.status;
+      }
+      tasks.push({
+        id: `inbound-${order.id}`,
+        type: 'inbound',
+        orderNo: order.orderNo,
+        title: `入库单 - ${order.supplier}`,
+        status,
+        createTime: order.createTime,
+        updateTime: order.updateTime,
+        operator: order.operator,
+        itemCount: order.items.length,
+        totalQuantity: order.items.reduce((sum, item) => sum + item.planQuantity, 0),
+        relatedParty: order.supplier,
+        remark: order.remark,
+      });
+    });
+
+    state.outboundOrders.forEach((order) => {
+      let status: TaskStatus;
+      if (order.status === 'cancelled') {
+        status = 'cancelled';
+      } else if (order.status === 'pending_review' || order.status === 'split') {
+        status = 'in_progress';
+      } else {
+        status = order.status;
+      }
+      tasks.push({
+        id: `outbound-${order.id}`,
+        type: 'outbound',
+        orderNo: order.orderNo,
+        title: `出库单 - ${order.customer}`,
+        status,
+        createTime: order.createTime,
+        updateTime: order.updateTime,
+        operator: order.operator,
+        itemCount: order.items.length,
+        totalQuantity: order.items.reduce((sum, item) => sum + item.planQuantity, 0),
+        relatedParty: order.customer,
+        remark: order.remark,
+      });
+    });
+
+    state.stocktakePlans.forEach((plan) => {
+      let status: TaskStatus;
+      if (plan.status === 'cancelled') {
+        status = 'cancelled';
+      } else if (plan.status === 'completed') {
+        status = 'completed';
+      } else if (plan.status === 'in_progress') {
+        status = 'in_progress';
+      } else {
+        status = 'pending';
+      }
+      tasks.push({
+        id: `stocktake-${plan.id}`,
+        type: 'stocktake',
+        orderNo: plan.planNo,
+        title: `盘点 - ${plan.name}`,
+        status,
+        createTime: plan.createTime,
+        updateTime: plan.endTime || plan.startTime || plan.createTime,
+        operator: plan.operator,
+        itemCount: plan.items.length,
+        totalQuantity: plan.items.reduce((sum, item) => sum + item.systemQuantity, 0),
+        relatedParty: plan.type === 'full' ? '全盘' : plan.type === 'partial' ? '部分盘点' : '周期盘点',
+        remark: plan.remark,
+      });
+    });
+
+    return tasks.sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime());
+  },
+
+  getTaskStats: () => {
+    const tasks = get().getTasks();
+
+    const totalInProgress = tasks.filter((t) => t.status === 'in_progress').length;
+    const totalCompleted = tasks.filter((t) => t.status === 'completed').length;
+    const totalCancelled = tasks.filter((t) => t.status === 'cancelled').length;
+
+    const todayPending = tasks.filter((t) => {
+      const taskDate = new Date(t.createTime).toDateString();
+      const today = new Date('2026-06-06').toDateString();
+      return t.status === 'pending' && taskDate === today;
+    }).length;
+
+    const pendingTasks = tasks.filter((t) => t.status === 'pending');
+    const inboundCount = pendingTasks.filter((t) => t.type === 'inbound').length;
+    const outboundCount = pendingTasks.filter((t) => t.type === 'outbound').length;
+    const stocktakeCount = pendingTasks.filter((t) => t.type === 'stocktake').length;
+
+    const totalPendingCount = pendingTasks.length;
+    const inboundRatio = totalPendingCount > 0 ? Math.round((inboundCount / totalPendingCount) * 10000) / 100 : 0;
+    const outboundRatio = totalPendingCount > 0 ? Math.round((outboundCount / totalPendingCount) * 10000) / 100 : 0;
+    const stocktakeRatio = totalPendingCount > 0 ? Math.round((stocktakeCount / totalPendingCount) * 10000) / 100 : 0;
+
+    return {
+      totalPending: todayPending,
+      totalInProgress,
+      totalCompleted,
+      totalCancelled,
+      typeBreakdown: {
+        inbound: inboundCount,
+        outbound: outboundCount,
+        stocktake: stocktakeCount,
+      },
+      typeRatio: {
+        inbound: inboundRatio,
+        outbound: outboundRatio,
+        stocktake: stocktakeRatio,
+      },
+    };
+  },
+
+  updateTaskStatus: (taskId, taskType, newStatus) => {
+    const state = get();
+    const actualId = taskId.replace(`${taskType}-`, '');
+
+    if (taskType === 'inbound') {
+      const order = state.inboundOrders.find((o) => o.id === actualId);
+      if (!order) return;
+
+      if (newStatus === 'completed') {
+        for (const item of order.items) {
+          if (item.locationId && state.isLocationLocked(item.locationId)) {
+            const loc = state.locations.find((l) => l.id === item.locationId);
+            throw new Error(`库位 ${loc?.code || item.locationId} 已被锁定，禁止入库。`);
+          }
+        }
+      }
+
+      set((state) => ({
+        inboundOrders: state.inboundOrders.map((o) =>
+          o.id === actualId ? { ...o, status: newStatus, updateTime: new Date().toLocaleString() } : o
+        ),
+      }));
+
+      useAppStore.getState().addNotification({
+        type: 'inbound',
+        title: '入库单状态更新',
+        orderNo: order.orderNo,
+        message: `状态已更新为: ${newStatus === 'pending' ? '待处理' : newStatus === 'in_progress' ? '进行中' : newStatus === 'completed' ? '已完成' : '已取消'}`,
+      });
+    } else if (taskType === 'outbound') {
+      const order = state.outboundOrders.find((o) => o.id === actualId);
+      if (!order) return;
+
+      set((state) => ({
+        outboundOrders: state.outboundOrders.map((o) =>
+          o.id === actualId ? { ...o, status: newStatus, updateTime: new Date().toLocaleString() } : o
+        ),
+      }));
+
+      useAppStore.getState().addNotification({
+        type: 'outbound',
+        title: '出库单状态更新',
+        orderNo: order.orderNo,
+        message: `状态已更新为: ${newStatus === 'pending' ? '待处理' : newStatus === 'in_progress' ? '进行中' : newStatus === 'completed' ? '已完成' : '已取消'}`,
+      });
+    } else if (taskType === 'stocktake') {
+      const plan = state.stocktakePlans.find((p) => p.id === actualId);
+      if (!plan) return;
+
+      let statusLabel = '';
+      if (newStatus === 'pending') statusLabel = '待处理';
+      else if (newStatus === 'in_progress') statusLabel = '进行中';
+      else if (newStatus === 'completed') statusLabel = '已完成';
+      else if (newStatus === 'cancelled') statusLabel = '已取消';
+
+      if (newStatus === 'completed') {
+        state.completeStocktake(actualId);
+        useAppStore.getState().addNotification({
+          type: 'stocktake',
+          title: '盘点计划状态更新',
+          orderNo: plan.planNo,
+          message: '状态已更新为: 已完成',
+        });
+      } else if (newStatus === 'cancelled') {
+        set((state) => ({
+          stocktakePlans: state.stocktakePlans.map((p) =>
+            p.id === actualId
+              ? {
+                  ...p,
+                  status: 'cancelled',
+                  endTime: new Date().toLocaleString(),
+                }
+              : p
+          ),
+        }));
+        useAppStore.getState().addNotification({
+          type: 'stocktake',
+          title: '盘点计划状态更新',
+          orderNo: plan.planNo,
+          message: '状态已更新为: 已取消',
+        });
+      } else {
+        set((state) => ({
+          stocktakePlans: state.stocktakePlans.map((p) =>
+            p.id === actualId
+              ? {
+                  ...p,
+                  status: newStatus === 'in_progress' ? 'in_progress' : 'pending',
+                  startTime: newStatus === 'in_progress' ? new Date().toLocaleString() : p.startTime,
+                }
+              : p
+          ),
+        }));
+        useAppStore.getState().addNotification({
+          type: 'stocktake',
+          title: '盘点计划状态更新',
+          orderNo: plan.planNo,
+          message: `状态已更新为: ${statusLabel}`,
+        });
+      }
+    }
+  },
+
+  getTaskDetail: (taskId, taskType) => {
+    const state = get();
+    const actualId = taskId.replace(`${taskType}-`, '');
+
+    if (taskType === 'inbound') {
+      const order = state.inboundOrders.find((o) => o.id === actualId);
+      if (!order) return null;
+      return { order, items: order.items };
+    } else if (taskType === 'outbound') {
+      const order = state.outboundOrders.find((o) => o.id === actualId);
+      if (!order) return null;
+      return { order, items: order.items };
+    } else if (taskType === 'stocktake') {
+      const plan = state.stocktakePlans.find((p) => p.id === actualId);
+      if (!plan) return null;
+      return { order: plan, items: plan.items };
+    }
+
+    return null;
   },
 }));

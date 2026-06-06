@@ -15,6 +15,7 @@ import Supplier from '../pages/Supplier';
 import Customer from '../pages/Customer';
 import Product from '../pages/Product';
 import InventorySnapshot from '../pages/InventorySnapshot';
+import TaskBoard from '../pages/TaskBoard';
 import { useAuthStore } from '../store/authStore';
 
 const ProtectedRoute = ({ children }: { children: ReactElement }) => {
@@ -93,6 +94,10 @@ export const router = createBrowserRouter([
       {
         path: 'product',
         element: <Product />,
+      },
+      {
+        path: 'task-board',
+        element: <TaskBoard />,
       },
     ],
   },
