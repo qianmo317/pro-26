@@ -424,6 +424,189 @@ createInboundOrder(
   '王五'
 );
 
+createInboundOrder(
+  '1',
+  '供应商A',
+  'completed',
+  [
+    {
+      productId: '1',
+      planQuantity: 50,
+      actualQuantity: 50,
+      locationId: '2',
+      batchNo: 'BATCH20260530',
+      productionDate: '2026-05-30',
+      expirationDate: '2028-05-30',
+    },
+    {
+      productId: '2',
+      planQuantity: 100,
+      actualQuantity: 100,
+      locationId: '6',
+      batchNo: 'BATCH20260528',
+      productionDate: '2026-05-28',
+      expirationDate: '2028-05-28',
+    },
+  ],
+  '2026-05-30 09:00:00',
+  '2026-05-30 15:00:00',
+  '张三'
+);
+
+createInboundOrder(
+  '2',
+  '供应商B',
+  'completed',
+  [
+    {
+      productId: '3',
+      planQuantity: 30,
+      actualQuantity: 30,
+      locationId: '30',
+      batchNo: 'BATCH20260520',
+      productionDate: '2026-05-20',
+      expirationDate: '2028-05-20',
+    },
+    {
+      productId: '7',
+      planQuantity: 8,
+      actualQuantity: 8,
+      locationId: '35',
+      batchNo: 'BATCH20260525',
+      productionDate: '2026-05-25',
+      expirationDate: '2028-05-25',
+    },
+  ],
+  '2026-05-25 10:00:00',
+  '2026-05-25 16:00:00',
+  '李四'
+);
+
+createInboundOrder(
+  '3',
+  '供应商C',
+  'completed',
+  [
+    {
+      productId: '5',
+      planQuantity: 40,
+      actualQuantity: 40,
+      locationId: '40',
+      batchNo: 'BATCH20260415',
+      productionDate: '2026-04-15',
+      expirationDate: '2028-04-15',
+    },
+    {
+      productId: '8',
+      planQuantity: 25,
+      actualQuantity: 25,
+      locationId: '45',
+      batchNo: 'BATCH20260420',
+      productionDate: '2026-04-20',
+      expirationDate: '2028-04-20',
+    },
+  ],
+  '2026-04-20 08:00:00',
+  '2026-04-20 14:00:00',
+  '王五'
+);
+
+createInboundOrder(
+  '4',
+  '供应商D',
+  'completed',
+  [
+    {
+      productId: '1',
+      planQuantity: 30,
+      actualQuantity: 30,
+      locationId: '50',
+      batchNo: 'BATCH20260310',
+      productionDate: '2026-03-10',
+      expirationDate: '2028-03-10',
+    },
+    {
+      productId: '4',
+      planQuantity: 15,
+      actualQuantity: 15,
+      locationId: '55',
+      batchNo: 'BATCH20260315',
+      productionDate: '2026-03-15',
+      expirationDate: '2028-03-15',
+    },
+  ],
+  '2026-03-15 10:00:00',
+  '2026-03-15 16:00:00',
+  '赵六'
+);
+
+createInboundOrder(
+  '1',
+  '供应商A',
+  'completed',
+  [
+    {
+      productId: '2',
+      planQuantity: 80,
+      actualQuantity: 80,
+      locationId: '60',
+      batchNo: 'BATCH20260201',
+      productionDate: '2026-02-01',
+      expirationDate: '2028-02-01',
+    },
+    {
+      productId: '6',
+      planQuantity: 200,
+      actualQuantity: 200,
+      locationId: '65',
+      batchNo: 'BATCH20260210',
+      productionDate: '2026-02-10',
+      expirationDate: '2028-02-10',
+    },
+  ],
+  '2026-02-10 09:00:00',
+  '2026-02-10 15:00:00',
+  '张三'
+);
+
+createInboundOrder(
+  '5',
+  '供应商E',
+  'completed',
+  [
+    {
+      productId: '3',
+      planQuantity: 10,
+      actualQuantity: 10,
+      locationId: '70',
+      batchNo: 'BATCH20251201',
+      productionDate: '2025-12-01',
+      expirationDate: '2027-12-01',
+    },
+    {
+      productId: '7',
+      planQuantity: 5,
+      actualQuantity: 5,
+      locationId: '75',
+      batchNo: 'BATCH20251115',
+      productionDate: '2025-11-15',
+      expirationDate: '2027-11-15',
+    },
+    {
+      productId: '5',
+      planQuantity: 20,
+      actualQuantity: 20,
+      locationId: '80',
+      batchNo: 'BATCH20251001',
+      productionDate: '2025-10-01',
+      expirationDate: '2027-10-01',
+    },
+  ],
+  '2025-12-05 10:00:00',
+  '2025-12-05 16:00:00',
+  '李四'
+);
+
 export const mockOutboundOrders: OutboundOrder[] = [];
 
 const getCustomerById = (id: string) => mockCustomers.find((c) => c.id === id);
@@ -993,3 +1176,105 @@ export const getABCClass = (productId: string): ABCClass => {
   if (product.price >= 100) return 'B';
   return 'C';
 };
+
+import type { StockAgeRange, StockAgeItem, StockAgeStat, StockAgeData, StockAgeFilter } from '../types';
+
+const getStockAgeRange = (days: number): StockAgeRange => {
+  if (days <= 30) return '0-30';
+  if (days <= 60) return '31-60';
+  if (days <= 90) return '61-90';
+  return '90+';
+};
+
+const rangeLabels: Record<StockAgeRange, string> = {
+  '0-30': '0-30天',
+  '31-60': '31-60天',
+  '61-90': '61-90天',
+  '90+': '90天以上',
+};
+
+export const generateStockAgeData = (filter?: StockAgeFilter): StockAgeData => {
+  const today = new Date('2026-06-06');
+  const items: StockAgeItem[] = [];
+
+  mockInventory.forEach((inv) => {
+    const product = getProductById(inv.productId);
+    const location = getLocationById(inv.locationId);
+    if (!product || !location) return;
+
+    if (filter?.categories && filter.categories.length > 0) {
+      if (!filter.categories.includes(product.category)) return;
+    }
+    if (filter?.zones && filter.zones.length > 0) {
+      if (!filter.zones.includes(location.zone)) return;
+    }
+
+    const prodDate = new Date(inv.productionDate);
+    const stockDays = Math.floor((today.getTime() - prodDate.getTime()) / (1000 * 60 * 60 * 24));
+    const ageRange = getStockAgeRange(stockDays);
+    const amount = product.price * inv.quantity;
+
+    items.push({
+      productId: inv.productId,
+      productName: inv.productName,
+      productSku: inv.productSku,
+      category: product.category,
+      zone: location.zone,
+      locationCode: inv.locationCode,
+      batchNo: inv.batchNo,
+      quantity: inv.quantity,
+      price: product.price,
+      amount,
+      productionDate: inv.productionDate,
+      stockDays,
+      ageRange,
+    });
+  });
+
+  const ranges: StockAgeRange[] = ['0-30', '31-60', '61-90', '90+'];
+  const stats: StockAgeStat[] = ranges.map((range) => ({
+    range,
+    label: rangeLabels[range],
+    quantity: 0,
+    quantityRatio: 0,
+    amount: 0,
+    amountRatio: 0,
+  }));
+
+  let totalQuantity = 0;
+  let totalAmount = 0;
+
+  items.forEach((item) => {
+    totalQuantity += item.quantity;
+    totalAmount += item.amount;
+    const stat = stats.find((s) => s.range === item.ageRange);
+    if (stat) {
+      stat.quantity += item.quantity;
+      stat.amount += item.amount;
+    }
+  });
+
+  stats.forEach((stat) => {
+    stat.quantityRatio = totalQuantity > 0 ? Math.round((stat.quantity / totalQuantity) * 10000) / 100 : 0;
+    stat.amountRatio = totalAmount > 0 ? Math.round((stat.amount / totalAmount) * 10000) / 100 : 0;
+  });
+
+  const overageStat = stats.find((s) => s.range === '90+')!;
+  const overageQuantity = overageStat.quantity;
+  const overageAmount = overageStat.amount;
+  const overageQuantityRatio = overageStat.quantityRatio;
+  const overageAmountRatio = overageStat.amountRatio;
+
+  return {
+    stats,
+    items,
+    totalQuantity,
+    totalAmount,
+    overageQuantity,
+    overageAmount,
+    overageQuantityRatio,
+    overageAmountRatio,
+  };
+};
+
+export const mockStockAgeData: StockAgeData = generateStockAgeData();

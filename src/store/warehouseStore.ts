@@ -23,6 +23,9 @@ import type {
   CycleCountRecommendation,
   CycleCountPeriod,
   ABCClass,
+  StockAgeData,
+  StockAgeFilter,
+  StockAgeItem,
 } from '../types';
 import {
   mockSuppliers,
@@ -39,6 +42,7 @@ import {
   mockInventoryChangeRecords,
   mockCycleCountConfigs,
   getABCClass,
+  generateStockAgeData,
 } from '../mock/data';
 
 export interface InventorySummary {
@@ -110,6 +114,10 @@ interface WarehouseState {
   getLastStocktakeTime: (productId: string, locationId: string) => string | undefined;
   getABCClassForProduct: (productId: string) => ABCClass;
   calculateNextGenerateTime: (period: CycleCountPeriod, lastTime?: string) => string;
+  getStockAgeData: (filter?: StockAgeFilter) => StockAgeData;
+  getCategories: () => string[];
+  getZones: () => string[];
+  exportOverageItems: (items: StockAgeItem[]) => void;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -1011,5 +1019,49 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     }
 
     return generatedPlans;
+  },
+
+  getStockAgeData: (filter) => {
+    return generateStockAgeData(filter);
+  },
+
+  getCategories: () => {
+    const state = get();
+    const categories = new Set(state.products.map((p) => p.category));
+    return Array.from(categories);
+  },
+
+  getZones: () => {
+    const state = get();
+    const zones = new Set(state.locations.map((l) => l.zone));
+    return Array.from(zones);
+  },
+
+  exportOverageItems: (items) => {
+    const headers = ['商品SKU', '商品名称', '类别', '区域', '库位', '批次号', '数量', '单价', '金额', '生产日期', '库龄(天)'];
+    const rows = items.map((item) => [
+      item.productSku,
+      item.productName,
+      item.category,
+      item.zone,
+      item.locationCode,
+      item.batchNo,
+      item.quantity,
+      item.price,
+      item.amount,
+      item.productionDate,
+      item.stockDays,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `超龄商品列表_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   },
 }));

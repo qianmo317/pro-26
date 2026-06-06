@@ -379,6 +379,49 @@ export interface CycleCountRecommendation {
   reason: string;
 }
 
+export type StockAgeRange = '0-30' | '31-60' | '61-90' | '90+';
+
+export interface StockAgeItem {
+  productId: string;
+  productName: string;
+  productSku: string;
+  category: string;
+  zone: string;
+  locationCode: string;
+  batchNo: string;
+  quantity: number;
+  price: number;
+  amount: number;
+  productionDate: string;
+  stockDays: number;
+  ageRange: StockAgeRange;
+}
+
+export interface StockAgeStat {
+  range: StockAgeRange;
+  label: string;
+  quantity: number;
+  quantityRatio: number;
+  amount: number;
+  amountRatio: number;
+}
+
+export interface StockAgeData {
+  stats: StockAgeStat[];
+  items: StockAgeItem[];
+  totalQuantity: number;
+  totalAmount: number;
+  overageQuantity: number;
+  overageAmount: number;
+  overageQuantityRatio: number;
+  overageAmountRatio: number;
+}
+
+export interface StockAgeFilter {
+  categories: string[];
+  zones: string[];
+}
+
 export interface AppState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
