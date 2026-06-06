@@ -102,6 +102,7 @@ export interface InboundOrder {
   updateTime: string;
   operator?: string;
   remark?: string;
+  differenceReason?: string;
 }
 
 export interface InboundItem {
@@ -111,6 +112,7 @@ export interface InboundItem {
   productSku: string;
   planQuantity: number;
   actualQuantity: number;
+  receivedQuantity: number;
   locationId?: string;
   locationCode?: string;
   batchNo: string;

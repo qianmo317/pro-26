@@ -304,6 +304,7 @@ const createInboundOrder = (
         productSku: product?.sku || '',
         planQuantity: item.planQuantity,
         actualQuantity: item.actualQuantity,
+        receivedQuantity: item.actualQuantity,
         locationId: item.locationId,
         locationCode: item.locationId ? getLocationById(item.locationId)?.code : undefined,
         batchNo: item.batchNo,
