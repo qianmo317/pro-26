@@ -1249,7 +1249,7 @@ const generateInventoryChangeRecords = () => {
 
 generateInventoryChangeRecords();
 
-import type { CycleCountConfig, ABCClass } from '../types';
+import type { CycleCountConfig } from '../types';
 
 export const mockCycleCountConfigs: CycleCountConfig[] = [
   {
@@ -1408,3 +1408,207 @@ export const generateStockAgeData = (filter?: StockAgeFilter): StockAgeData => {
 };
 
 export const mockStockAgeData: StockAgeData = generateStockAgeData();
+
+import type { ABCAnalysisItem, ABCAnalysisData, ABCAnalysisFilter, ABCAnalysisSummary, ABCClass } from '../types';
+
+const calculateABCClassByCumulative = (cumulativeRatio: number): ABCClass => {
+  if (cumulativeRatio <= 70) return 'A';
+  if (cumulativeRatio <= 90) return 'B';
+  return 'C';
+};
+
+const combineABCClasses = (amountClass: ABCClass, frequencyClass: ABCClass): ABCClass => {
+  const classMatrix: Record<string, ABCClass> = {
+    'A-A': 'A',
+    'A-B': 'A',
+    'A-C': 'B',
+    'B-A': 'A',
+    'B-B': 'B',
+    'B-C': 'C',
+    'C-A': 'B',
+    'C-B': 'C',
+    'C-C': 'C',
+  };
+  return classMatrix[`${amountClass}-${frequencyClass}`] || 'C';
+};
+
+export const generateABCAnalysisData = (
+  startDate?: string,
+  endDate?: string,
+  filter?: ABCAnalysisFilter
+): ABCAnalysisData => {
+  const today = new Date('2026-06-06');
+  const start = startDate ? new Date(startDate) : new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const end = endDate ? new Date(endDate) : today;
+
+  const productStats = new Map<string, {
+    totalQuantity: number;
+    totalAmount: number;
+    inboundCount: number;
+    outboundCount: number;
+  }>();
+
+  mockProducts.forEach((product) => {
+    productStats.set(product.id, {
+      totalQuantity: 0,
+      totalAmount: 0,
+      inboundCount: 0,
+      outboundCount: 0,
+    });
+  });
+
+  mockInventory.forEach((inv) => {
+    const product = getProductById(inv.productId);
+    if (!product) return;
+    const stats = productStats.get(inv.productId);
+    if (stats) {
+      stats.totalQuantity += inv.quantity;
+      stats.totalAmount += inv.quantity * product.price;
+    }
+  });
+
+  mockInboundOrders
+    .filter((o) => o.status === 'completed')
+    .forEach((order) => {
+      const orderDate = new Date(order.createTime);
+      if (orderDate < start || orderDate > end) return;
+      order.items.forEach((item) => {
+        const stats = productStats.get(item.productId);
+        if (stats) {
+          stats.inboundCount += 1;
+        }
+      });
+    });
+
+  mockOutboundOrders
+    .filter((o) => o.status === 'completed')
+    .forEach((order) => {
+      const orderDate = new Date(order.createTime);
+      if (orderDate < start || orderDate > end) return;
+      order.items.forEach((item) => {
+        const stats = productStats.get(item.productId);
+        if (stats) {
+          stats.outboundCount += 1;
+        }
+      });
+    });
+
+  let items: ABCAnalysisItem[] = [];
+  mockProducts.forEach((product) => {
+    const stats = productStats.get(product.id);
+    if (!stats) return;
+
+    if (filter?.categories && filter.categories.length > 0) {
+      if (!filter.categories.includes(product.category)) return;
+    }
+
+    const totalTransactionCount = stats.inboundCount + stats.outboundCount;
+
+    items.push({
+      productId: product.id,
+      productSku: product.sku,
+      productName: product.name,
+      category: product.category,
+      unit: product.unit,
+      price: product.price,
+      totalQuantity: stats.totalQuantity,
+      totalAmount: stats.totalAmount,
+      amountRatio: 0,
+      cumulativeAmountRatio: 0,
+      inboundCount: stats.inboundCount,
+      outboundCount: stats.outboundCount,
+      totalTransactionCount,
+      frequencyRatio: 0,
+      cumulativeFrequencyRatio: 0,
+      abcClass: 'C',
+      amountClass: 'C',
+      frequencyClass: 'C',
+    });
+  });
+
+  const totalAmount = items.reduce((sum, item) => sum + item.totalAmount, 0);
+  const totalFrequency = items.reduce((sum, item) => sum + item.totalTransactionCount, 0);
+
+  items.forEach((item) => {
+    item.amountRatio = totalAmount > 0 ? Math.round((item.totalAmount / totalAmount) * 10000) / 100 : 0;
+    item.frequencyRatio = totalFrequency > 0 ? Math.round((item.totalTransactionCount / totalFrequency) * 10000) / 100 : 0;
+  });
+
+  const sortedByAmount = [...items].sort((a, b) => b.totalAmount - a.totalAmount);
+  let cumulativeAmount = 0;
+  sortedByAmount.forEach((item) => {
+    cumulativeAmount += item.totalAmount;
+    const cumulativeRatio = totalAmount > 0 ? Math.round((cumulativeAmount / totalAmount) * 10000) / 100 : 0;
+    const originalItem = items.find((i) => i.productId === item.productId);
+    if (originalItem) {
+      originalItem.cumulativeAmountRatio = cumulativeRatio;
+      originalItem.amountClass = calculateABCClassByCumulative(cumulativeRatio);
+    }
+  });
+
+  const sortedByFrequency = [...items].sort((a, b) => b.totalTransactionCount - a.totalTransactionCount);
+  let cumulativeFrequency = 0;
+  sortedByFrequency.forEach((item) => {
+    cumulativeFrequency += item.totalTransactionCount;
+    const cumulativeRatio = totalFrequency > 0 ? Math.round((cumulativeFrequency / totalFrequency) * 10000) / 100 : 0;
+    const originalItem = items.find((i) => i.productId === item.productId);
+    if (originalItem) {
+      originalItem.cumulativeFrequencyRatio = cumulativeRatio;
+      originalItem.frequencyClass = calculateABCClassByCumulative(cumulativeRatio);
+    }
+  });
+
+  items.forEach((item) => {
+    item.abcClass = combineABCClasses(item.amountClass, item.frequencyClass);
+  });
+
+  if (filter?.abcClasses && filter.abcClasses.length > 0) {
+    items = items.filter((item) => filter.abcClasses!.includes(item.abcClass));
+  }
+
+  items.sort((a, b) => {
+    const classOrder: Record<ABCClass, number> = { A: 0, B: 1, C: 2 };
+    if (classOrder[a.abcClass] !== classOrder[b.abcClass]) {
+      return classOrder[a.abcClass] - classOrder[b.abcClass];
+    }
+    return b.totalAmount - a.totalAmount;
+  });
+
+  const summary: ABCAnalysisSummary = {
+    classA: { count: 0, countRatio: 0, totalAmount: 0, amountRatio: 0, totalFrequency: 0, frequencyRatio: 0 },
+    classB: { count: 0, countRatio: 0, totalAmount: 0, amountRatio: 0, totalFrequency: 0, frequencyRatio: 0 },
+    classC: { count: 0, countRatio: 0, totalAmount: 0, amountRatio: 0, totalFrequency: 0, frequencyRatio: 0 },
+    totalProducts: items.length,
+    totalAmount,
+    totalFrequency,
+  };
+
+  items.forEach((item) => {
+    const classKey = `class${item.abcClass}` as keyof ABCAnalysisSummary;
+    const classSummary = summary[classKey] as ABCAnalysisSummary['classA'];
+    classSummary.count += 1;
+    classSummary.totalAmount += item.totalAmount;
+    classSummary.totalFrequency += item.totalTransactionCount;
+  });
+
+  (['classA', 'classB', 'classC'] as const).forEach((classKey) => {
+    const classSummary = summary[classKey];
+    classSummary.countRatio = summary.totalProducts > 0 ? Math.round((classSummary.count / summary.totalProducts) * 10000) / 100 : 0;
+    classSummary.amountRatio = totalAmount > 0 ? Math.round((classSummary.totalAmount / totalAmount) * 10000) / 100 : 0;
+    classSummary.frequencyRatio = totalFrequency > 0 ? Math.round((classSummary.totalFrequency / totalFrequency) * 10000) / 100 : 0;
+  });
+
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  return {
+    items,
+    summary,
+    timeRange: {
+      start: formatDate(start),
+      end: formatDate(end),
+    },
+    calculateTime: new Date().toLocaleString(),
+  };
+};
+
+export const mockABCAnalysisData: ABCAnalysisData = generateABCAnalysisData();

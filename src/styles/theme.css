@@ -365,3 +365,27 @@ body {
   color: var(--text-secondary);
   font-size: 14px;
 }
+
+.table-row-class-a {
+  background-color: rgba(231, 76, 60, 0.05) !important;
+}
+
+.table-row-class-a:hover {
+  background-color: rgba(231, 76, 60, 0.1) !important;
+}
+
+.table-row-class-b {
+  background-color: rgba(243, 156, 18, 0.05) !important;
+}
+
+.table-row-class-b:hover {
+  background-color: rgba(243, 156, 18, 0.1) !important;
+}
+
+.table-row-class-c {
+  background-color: rgba(39, 174, 96, 0.05) !important;
+}
+
+.table-row-class-c:hover {
+  background-color: rgba(39, 174, 96, 0.1) !important;
+}

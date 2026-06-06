@@ -505,3 +505,69 @@ export interface InboundPrintData {
     locationCode: string;
   }>;
 }
+
+export interface ABCAnalysisItem {
+  productId: string;
+  productSku: string;
+  productName: string;
+  category: string;
+  unit: string;
+  price: number;
+  totalQuantity: number;
+  totalAmount: number;
+  amountRatio: number;
+  cumulativeAmountRatio: number;
+  inboundCount: number;
+  outboundCount: number;
+  totalTransactionCount: number;
+  frequencyRatio: number;
+  cumulativeFrequencyRatio: number;
+  abcClass: ABCClass;
+  amountClass: ABCClass;
+  frequencyClass: ABCClass;
+}
+
+export interface ABCAnalysisSummary {
+  classA: {
+    count: number;
+    countRatio: number;
+    totalAmount: number;
+    amountRatio: number;
+    totalFrequency: number;
+    frequencyRatio: number;
+  };
+  classB: {
+    count: number;
+    countRatio: number;
+    totalAmount: number;
+    amountRatio: number;
+    totalFrequency: number;
+    frequencyRatio: number;
+  };
+  classC: {
+    count: number;
+    countRatio: number;
+    totalAmount: number;
+    amountRatio: number;
+    totalFrequency: number;
+    frequencyRatio: number;
+  };
+  totalProducts: number;
+  totalAmount: number;
+  totalFrequency: number;
+}
+
+export interface ABCAnalysisData {
+  items: ABCAnalysisItem[];
+  summary: ABCAnalysisSummary;
+  timeRange: {
+    start: string;
+    end: string;
+  };
+  calculateTime: string;
+}
+
+export interface ABCAnalysisFilter {
+  categories?: string[];
+  abcClasses?: ABCClass[];
+}

@@ -29,6 +29,8 @@ import type {
   ReviewRecord,
   ReviewItem,
   User,
+  ABCAnalysisData,
+  ABCAnalysisFilter,
 } from '../types';
 import {
   mockSuppliers,
@@ -46,6 +48,7 @@ import {
   mockCycleCountConfigs,
   getABCClass,
   generateStockAgeData,
+  generateABCAnalysisData,
 } from '../mock/data';
 import { useAppStore } from './appStore';
 
@@ -123,6 +126,8 @@ interface WarehouseState {
   getZones: () => string[];
   exportOverageItems: (items: StockAgeItem[]) => void;
   canReview: (user: User | null) => boolean;
+  getABCAnalysisData: (startDate?: string, endDate?: string, filter?: ABCAnalysisFilter) => ABCAnalysisData;
+  exportABCAnalysis: (data: ABCAnalysisData) => void;
   submitForReview: (orderId: string, operator?: string) => void;
   reviewOutboundOrder: (
     orderId: string,
@@ -1104,6 +1109,54 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
     link.setAttribute('download', `超龄商品列表_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
+
+  getABCAnalysisData: (startDate, endDate, filter) => {
+    return generateABCAnalysisData(startDate, endDate, filter);
+  },
+
+  exportABCAnalysis: (data) => {
+    const headers = ['ABC分类', '商品SKU', '商品名称', '类别', '单价(元)', '库存数量', '库存金额(元)', '金额占比(%)', '入库次数', '出库次数', '总频次', '频次占比(%)', '金额维度分类', '频次维度分类'];
+    const rows = data.items.map((item) => [
+      item.abcClass,
+      item.productSku,
+      item.productName,
+      item.category,
+      item.price,
+      item.totalQuantity,
+      item.totalAmount,
+      item.amountRatio,
+      item.inboundCount,
+      item.outboundCount,
+      item.totalTransactionCount,
+      item.frequencyRatio,
+      item.amountClass,
+      item.frequencyClass,
+    ]);
+
+    const summaryRows = [
+      [],
+      ['汇总统计', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['分类', '商品数量', '数量占比(%)', '库存金额(元)', '金额占比(%)', '总频次', '频次占比(%)', '', '', '', '', '', '', ''],
+      ['A类', data.summary.classA.count, data.summary.classA.countRatio, data.summary.classA.totalAmount, data.summary.classA.amountRatio, data.summary.classA.totalFrequency, data.summary.classA.frequencyRatio, '', '', '', '', '', '', ''],
+      ['B类', data.summary.classB.count, data.summary.classB.countRatio, data.summary.classB.totalAmount, data.summary.classB.amountRatio, data.summary.classB.totalFrequency, data.summary.classB.frequencyRatio, '', '', '', '', '', '', ''],
+      ['C类', data.summary.classC.count, data.summary.classC.countRatio, data.summary.classC.totalAmount, data.summary.classC.amountRatio, data.summary.classC.totalFrequency, data.summary.classC.frequencyRatio, '', '', '', '', '', '', ''],
+      ['合计', data.summary.totalProducts, '100', data.summary.totalAmount, '100', data.summary.totalFrequency, '100', '', '', '', '', '', '', ''],
+      [],
+      [`分析时间范围: ${data.timeRange.start} 至 ${data.timeRange.end}`, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      [`计算时间: ${data.calculateTime}`, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ];
+
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(',')), ...summaryRows.map((row) => row.join(','))].join('\n');
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `ABC分析报表_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
