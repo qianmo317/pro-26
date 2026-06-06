@@ -628,3 +628,36 @@ export interface ABCAnalysisFilter {
   categories?: string[];
   abcClasses?: ABCClass[];
 }
+
+export interface InventorySnapshotItem {
+  id: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  category: string;
+  unit: string;
+  locationId: string;
+  locationCode: string;
+  zone: string;
+  batchNo: string;
+  productionDate: string;
+  expirationDate?: string;
+  historicalQuantity: number;
+  currentQuantity: number;
+  quantityDiff: number;
+  quantityDiffPercent: number;
+}
+
+export interface InventorySnapshotData {
+  snapshotDate: string;
+  currentDate: string;
+  items: InventorySnapshotItem[];
+  totalHistoricalQuantity: number;
+  totalCurrentQuantity: number;
+  totalDiffQuantity: number;
+  productCount: number;
+  locationCount: number;
+  increasedCount: number;
+  decreasedCount: number;
+  unchangedCount: number;
+}

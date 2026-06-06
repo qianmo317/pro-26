@@ -34,6 +34,8 @@ import type {
   StockDifferenceItem,
   StockAdjustmentOrder,
   StockAdjustmentItem,
+  InventorySnapshotData,
+  InventorySnapshotItem,
 } from '../types';
 import {
   mockSuppliers,
@@ -58,6 +60,7 @@ import {
   generateABCAnalysisData,
 } from '../mock/data';
 import { useAppStore } from './appStore';
+import * as XLSX from 'xlsx';
 
 export interface InventorySummary {
   productId: string;
@@ -159,6 +162,8 @@ interface WarehouseState {
   lockLocations: (locationIds: string[], reason: string, operator: string) => number;
   unlockLocations: (locationIds: string[], reason: string, operator: string) => number;
   isLocationLocked: (locationId: string) => boolean;
+  getInventorySnapshot: (targetDate: string) => InventorySnapshotData;
+  exportInventorySnapshotToExcel: (data: InventorySnapshotData) => void;
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -1569,5 +1574,155 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     const state = get();
     const loc = state.locations.find((l) => l.id === locationId);
     return loc?.status === 'locked';
+  },
+
+  getInventorySnapshot: (targetDate) => {
+    const state = get();
+    const targetDateEnd = new Date(targetDate);
+    targetDateEnd.setHours(23, 59, 59, 999);
+
+    const changesAfterTarget = state.inventoryChangeRecords.filter(
+      (record) => new Date(record.operateTime) > targetDateEnd
+    );
+
+    const historicalBalances = new Map<string, number>();
+    const currentBalances = new Map<string, number>();
+
+    state.inventory.forEach((inv) => {
+      const key = `${inv.productId}-${inv.locationId}-${inv.batchNo}`;
+      currentBalances.set(key, inv.quantity);
+      historicalBalances.set(key, inv.quantity);
+    });
+
+    changesAfterTarget.forEach((record) => {
+      const key = `${record.productId}-${record.locationId}-${record.batchNo}`;
+      const currentHist = historicalBalances.get(key) || 0;
+      historicalBalances.set(key, currentHist - record.quantity);
+    });
+
+    const items: InventorySnapshotItem[] = [];
+    const allKeys = new Set([...currentBalances.keys(), ...historicalBalances.keys()]);
+
+    let itemId = 1;
+    allKeys.forEach((key) => {
+      const currentQty = currentBalances.get(key) || 0;
+      const historicalQty = Math.max(0, historicalBalances.get(key) || 0);
+
+      if (currentQty <= 0 && historicalQty <= 0) return;
+
+      const [productId, locationId, batchNo] = key.split('-');
+      const product = state.products.find((p) => p.id === productId);
+      const location = state.locations.find((l) => l.id === locationId);
+      if (!product || !location) return;
+
+      const inventoryItem = state.inventory.find(
+        (inv) =>
+          inv.productId === productId &&
+          inv.locationId === locationId &&
+          inv.batchNo === batchNo
+      );
+
+      const quantityDiff = currentQty - historicalQty;
+      const quantityDiffPercent = historicalQty > 0
+        ? Math.round((quantityDiff / historicalQty) * 10000) / 100
+        : currentQty > 0 ? 100 : 0;
+
+      items.push({
+        id: String(itemId++),
+        productId,
+        productName: product.name,
+        productSku: product.sku,
+        category: product.category,
+        unit: product.unit,
+        locationId,
+        locationCode: location.code,
+        zone: location.zone,
+        batchNo,
+        productionDate: inventoryItem?.productionDate || '-',
+        expirationDate: inventoryItem?.expirationDate,
+        historicalQuantity: historicalQty,
+        currentQuantity: currentQty,
+        quantityDiff,
+        quantityDiffPercent,
+      });
+    });
+
+    items.sort((a, b) => {
+      if (a.productName !== b.productName) {
+        return a.productName.localeCompare(b.productName);
+      }
+      return a.locationCode.localeCompare(b.locationCode);
+    });
+
+    const totalHistoricalQuantity = items.reduce((sum, item) => sum + item.historicalQuantity, 0);
+    const totalCurrentQuantity = items.reduce((sum, item) => sum + item.currentQuantity, 0);
+    const totalDiffQuantity = totalCurrentQuantity - totalHistoricalQuantity;
+    const productIds = new Set(items.map((i) => i.productId));
+    const locationIds = new Set(items.map((i) => i.locationId));
+    const increasedCount = items.filter((i) => i.quantityDiff > 0).length;
+    const decreasedCount = items.filter((i) => i.quantityDiff < 0).length;
+    const unchangedCount = items.filter((i) => i.quantityDiff === 0).length;
+
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+    return {
+      snapshotDate: formatDate(targetDateEnd),
+      currentDate: formatDate(new Date()),
+      items,
+      totalHistoricalQuantity,
+      totalCurrentQuantity,
+      totalDiffQuantity,
+      productCount: productIds.size,
+      locationCount: locationIds.size,
+      increasedCount,
+      decreasedCount,
+      unchangedCount,
+    };
+  },
+
+  exportInventorySnapshotToExcel: (data) => {
+    const detailData = data.items.map((item) => ({
+      '商品SKU': item.productSku,
+      '商品名称': item.productName,
+      '品类': item.category,
+      '单位': item.unit,
+      '区域': item.zone,
+      '库位': item.locationCode,
+      '批次号': item.batchNo,
+      '生产日期': item.productionDate,
+      '保质期': item.expirationDate || '-',
+      [`${data.snapshotDate} 库存`]: item.historicalQuantity,
+      [`${data.currentDate} 库存`]: item.currentQuantity,
+      '变动数量': item.quantityDiff > 0 ? `+${item.quantityDiff}` : item.quantityDiff,
+      '变动比例(%)': item.quantityDiffPercent > 0 ? `+${item.quantityDiffPercent}%` : `${item.quantityDiffPercent}%`,
+    }));
+
+    const summaryData = [
+      { '统计项': '快照日期', '数值': data.snapshotDate },
+      { '统计项': '当前日期', '数值': data.currentDate },
+      { '统计项': '商品种类', '数值': data.productCount },
+      { '统计项': '涉及库位', '数值': data.locationCount },
+      { '统计项': `${data.snapshotDate} 总库存`, '数值': data.totalHistoricalQuantity },
+      { '统计项': `${data.currentDate} 总库存`, '数值': data.totalCurrentQuantity },
+      { '统计项': '总变动数量', '数值': data.totalDiffQuantity > 0 ? `+${data.totalDiffQuantity}` : data.totalDiffQuantity },
+      { '统计项': '库存增加项数', '数值': data.increasedCount },
+      { '统计项': '库存减少项数', '数值': data.decreasedCount },
+      { '统计项': '库存无变动项数', '数值': data.unchangedCount },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(detailData);
+    const ws2 = XLSX.utils.json_to_sheet(summaryData);
+
+    ws1['!cols'] = [
+      { wch: 12 }, { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 },
+      { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
+    ];
+    ws2['!cols'] = [{ wch: 25 }, { wch: 15 }];
+
+    XLSX.utils.book_append_sheet(wb, ws1, '库存明细');
+    XLSX.utils.book_append_sheet(wb, ws2, '汇总统计');
+
+    XLSX.writeFile(wb, `库存快照_${data.snapshotDate}.xlsx`);
   },
 }));

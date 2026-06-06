@@ -14,6 +14,7 @@ import Report from '../pages/Report';
 import Supplier from '../pages/Supplier';
 import Customer from '../pages/Customer';
 import Product from '../pages/Product';
+import InventorySnapshot from '../pages/InventorySnapshot';
 import { useAuthStore } from '../store/authStore';
 
 const ProtectedRoute = ({ children }: { children: ReactElement }) => {
@@ -64,6 +65,10 @@ export const router = createBrowserRouter([
       {
         path: 'inventory',
         element: <Inventory />,
+      },
+      {
+        path: 'inventory-snapshot',
+        element: <InventorySnapshot />,
       },
       {
         path: 'stocktake',
