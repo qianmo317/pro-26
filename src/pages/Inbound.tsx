@@ -11,10 +11,14 @@ import {
   Space,
   Tag,
   Tabs,
+  Dropdown,
 } from '@arco-design/web-react';
-import { IconPlus, IconEye } from '@arco-design/web-react/icon';
+import { IconPlus, IconEye, IconPrinter, IconDown } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { toast } from '../components/Toast';
+import PrintModal from '../components/PrintModal';
+import InboundPrintTemplate from '../components/InboundPrintTemplate';
+import LabelPrint from '../components/LabelPrint';
 import type { InboundOrder, InboundItem } from '../types';
 
 interface InboundFormValues {
@@ -36,6 +40,9 @@ export default function Inbound() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<InboundOrder | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
+  const [printVisible, setPrintVisible] = useState(false);
+  const [labelPrintVisible, setLabelPrintVisible] = useState(false);
+  const [printType, setPrintType] = useState<'order' | 'label'>('order');
   const [form] = Form.useForm();
   const { suppliers, inboundOrders, products, addInboundOrder, updateInboundOrder } =
     useWarehouseStore();
@@ -94,7 +101,7 @@ export default function Inbound() {
     },
     {
       title: '操作',
-      width: 180,
+      width: 240,
       render: (_: unknown, record: InboundOrder) => (
         <Space>
           <Button
@@ -108,6 +115,43 @@ export default function Inbound() {
           >
             查看
           </Button>
+          <Dropdown
+            droplist={
+              <div>
+                <div
+                  style={{ padding: '8px 16px', cursor: 'pointer' }}
+                  onClick={() => {
+                    setSelectedOrder(record);
+                    setPrintType('order');
+                    setPrintVisible(true);
+                  }}
+                >
+                  打印入库单
+                </div>
+                <div
+                  style={{ padding: '8px 16px', cursor: 'pointer' }}
+                  onClick={() => {
+                    setSelectedOrder(record);
+                    setPrintType('label');
+                    setLabelPrintVisible(true);
+                  }}
+                >
+                  打印商品标签
+                </div>
+              </div>
+            }
+            trigger="click"
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<IconPrinter />}
+              style={{ color: 'var(--primary-color)' }}
+            >
+              打印
+              <IconDown />
+            </Button>
+          </Dropdown>
           {record.status === 'pending' && (
             <Button
               type="text"
@@ -366,7 +410,45 @@ export default function Inbound() {
         onOk={() => setDetailVisible(false)}
         onCancel={() => setDetailVisible(false)}
         style={{ width: 800 }}
-        footer={null}
+        footer={
+          selectedOrder ? (
+            <Space style={{ float: 'right' }}>
+              <Button onClick={() => setDetailVisible(false)}>关闭</Button>
+              <Dropdown
+                droplist={
+                  <div>
+                    <div
+                      style={{ padding: '8px 16px', cursor: 'pointer' }}
+                      onClick={() => {
+                        setDetailVisible(false);
+                        setPrintType('order');
+                        setPrintVisible(true);
+                      }}
+                    >
+                      打印入库单
+                    </div>
+                    <div
+                      style={{ padding: '8px 16px', cursor: 'pointer' }}
+                      onClick={() => {
+                        setDetailVisible(false);
+                        setPrintType('label');
+                        setLabelPrintVisible(true);
+                      }}
+                    >
+                      打印商品标签
+                    </div>
+                  </div>
+                }
+                trigger="click"
+              >
+                <Button type="primary" icon={<IconPrinter />}>
+                  打印
+                  <IconDown />
+                </Button>
+              </Dropdown>
+            </Space>
+          ) : null
+        }
       >
         {selectedOrder && (
           <div>
@@ -475,6 +557,51 @@ export default function Inbound() {
           </div>
         )}
       </Modal>
+
+      <PrintModal
+        visible={printVisible && printType === 'order' && selectedOrder !== null}
+        title="打印入库单"
+        onCancel={() => setPrintVisible(false)}
+        onAfterPrint={() => toast.success('入库单打印任务已发送')}
+      >
+        {selectedOrder && (
+          <InboundPrintTemplate
+            data={{
+              orderNo: selectedOrder.orderNo,
+              supplier: selectedOrder.supplier,
+              operator: selectedOrder.operator || '-',
+              createTime: selectedOrder.createTime,
+              items: selectedOrder.items.map((item) => ({
+                productName: item.productName,
+                productSku: item.productSku,
+                batchNo: item.batchNo,
+                planQuantity: item.planQuantity,
+                actualQuantity: item.actualQuantity,
+                locationCode: item.locationCode || '-',
+              })),
+            }}
+          />
+        )}
+      </PrintModal>
+
+      <PrintModal
+        visible={labelPrintVisible && printType === 'label' && selectedOrder !== null}
+        title="打印商品标签"
+        onCancel={() => setLabelPrintVisible(false)}
+        onAfterPrint={() => toast.success('标签打印任务已发送')}
+      >
+        {selectedOrder && (
+          <LabelPrint
+            items={selectedOrder.items.map((item) => ({
+              sku: item.productSku,
+              name: item.productName,
+              batchNo: item.batchNo,
+              quantity: item.actualQuantity || item.planQuantity,
+              inboundDate: selectedOrder.createTime.split(' ')[0],
+            }))}
+          />
+        )}
+      </PrintModal>
     </div>
   );
 }

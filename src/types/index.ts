@@ -428,3 +428,34 @@ export interface AppState {
   currentPage: string;
   setCurrentPage: (page: string) => void;
 }
+
+export interface LabelSize {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  unit: 'mm' | 'px';
+}
+
+export interface LabelPrintData {
+  sku: string;
+  name: string;
+  batchNo: string;
+  quantity: number;
+  inboundDate: string;
+}
+
+export interface InboundPrintData {
+  orderNo: string;
+  supplier: string;
+  operator: string;
+  createTime: string;
+  items: Array<{
+    productName: string;
+    productSku: string;
+    batchNo: string;
+    planQuantity: number;
+    actualQuantity: number;
+    locationCode: string;
+  }>;
+}
