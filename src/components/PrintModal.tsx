@@ -60,15 +60,22 @@ export default function PrintModal({
               body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
                 padding: 20px;
-                color: #333;
+                color: #000;
                 font-size: 14px;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              img {
+                image-rendering: pixelated;
+                -ms-interpolation-mode: nearest-neighbor;
               }
               @media print {
                 body {
                   padding: 0;
                 }
                 @page {
-                  margin: 10mm;
+                  margin: 2mm;
+                  size: auto;
                 }
               }
             </style>
@@ -87,7 +94,7 @@ export default function PrintModal({
         printWindow.close();
         setPrinting(false);
         onAfterPrint?.();
-      }, 500);
+      }, 800);
     } catch (error) {
       setPrinting(false);
       console.error('打印失败:', error);

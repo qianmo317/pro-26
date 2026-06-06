@@ -8,11 +8,15 @@ import {
   InputNumber,
   Select,
   Tag,
+  Space,
 } from '@arco-design/web-react';
-import { IconEdit, IconSearch } from '@arco-design/web-react/icon';
+import { IconEdit, IconSearch, IconPrinter } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { toast } from '../components/Toast';
-import type { Product } from '../types';
+import PrintModal from '../components/PrintModal';
+import ProductBarcodePrint from '../components/ProductBarcodePrint';
+import { generateProductBarcodeContent } from '../utils/barcode';
+import type { Product, ProductLabelPrintData } from '../types';
 
 const FormItem = Form.Item;
 const { Option } = Select;
@@ -29,6 +33,8 @@ export default function Product() {
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [barcodePrintVisible, setBarcodePrintVisible] = useState(false);
   const { products, updateProductSafetyStock, getInventorySummary } = useWarehouseStore();
 
   const inventorySummary = useMemo(() => getInventorySummary(), [getInventorySummary]);
@@ -47,6 +53,19 @@ export default function Product() {
       return matchSearch && matchCategory;
     });
   }, [products, searchText, categoryFilter]);
+
+  const selectedProductsForPrint = useMemo(() => {
+    const selected = products.filter((p) => selectedRowKeys.includes(p.id));
+    return selected.map<ProductLabelPrintData>((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      category: p.category,
+      price: p.price,
+      unit: p.unit,
+      barcodeContent: generateProductBarcodeContent(p.sku, p.name),
+    }));
+  }, [products, selectedRowKeys]);
 
   const getStockStatus = (productId: string) => {
     const summary = inventorySummary.find((s) => s.productId === productId);
@@ -159,6 +178,21 @@ export default function Product() {
     form.resetFields();
   };
 
+  const handlePrintBarcode = () => {
+    if (selectedRowKeys.length === 0) {
+      toast.warning('请先选择要打印条码的商品');
+      return;
+    }
+    setBarcodePrintVisible(true);
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: (string | number)[]) => {
+      setSelectedRowKeys(newSelectedRowKeys as string[]);
+    },
+  };
+
   return (
     <div>
       <div
@@ -189,6 +223,16 @@ export default function Product() {
             </Select>
           </div>
         </div>
+        <Space>
+          <Button
+            type="primary"
+            icon={<IconPrinter />}
+            onClick={handlePrintBarcode}
+            disabled={selectedRowKeys.length === 0}
+          >
+            打印条码 ({selectedRowKeys.length})
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -196,6 +240,7 @@ export default function Product() {
         data={filteredProducts}
         rowKey="id"
         pagination={{ pageSize: 10 }}
+        rowSelection={rowSelection}
       />
 
       <Modal
@@ -233,6 +278,17 @@ export default function Product() {
           </div>
         </Form>
       </Modal>
+
+      <PrintModal
+        visible={barcodePrintVisible}
+        title="商品条码打印"
+        onCancel={() => setBarcodePrintVisible(false)}
+        onAfterPrint={() => toast.success('条码打印任务已发送')}
+      >
+        {selectedProductsForPrint.length > 0 && (
+          <ProductBarcodePrint products={selectedProductsForPrint} />
+        )}
+      </PrintModal>
     </div>
   );
 }

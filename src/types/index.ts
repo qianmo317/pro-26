@@ -548,6 +548,16 @@ export interface LabelPrintData {
   inboundDate: string;
 }
 
+export interface ProductLabelPrintData {
+  id: string;
+  sku: string;
+  name: string;
+  category: string;
+  price: number;
+  unit: string;
+  barcodeContent: string;
+}
+
 export interface InboundPrintData {
   orderNo: string;
   supplier: string;
