@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Layout as ArcoLayout, Menu, Avatar, Button } from '@arco-design/web-react';
+import { useState, useEffect, useRef } from 'react';
+import { Layout as ArcoLayout, Menu, Avatar, Button, Badge, Notification } from '@arco-design/web-react';
 import {
   IconHome,
   IconImport,
@@ -19,10 +19,13 @@ import {
   IconList,
   IconSwap,
   IconSchedule,
+  IconNotification,
 } from '@arco-design/web-react/icon';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
+import NotificationCenter from './NotificationCenter';
+import type { NotificationType } from '../types';
 
 const Sider = ArcoLayout.Sider;
 const Header = ArcoLayout.Header;
@@ -44,13 +47,64 @@ const menuItems = [
   { key: 'report', icon: <IconFile />, text: '报表分析' },
 ];
 
+const notificationTypeConfig: Record<NotificationType, { icon: React.ReactNode; color: string }> = {
+  inbound: {
+    icon: <IconImport style={{ fontSize: '20px' }} />,
+    color: '#ff7d00',
+  },
+  outbound: {
+    icon: <IconExport style={{ fontSize: '20px' }} />,
+    color: '#27ae60',
+  },
+  stocktake: {
+    icon: <IconPlus style={{ fontSize: '20px' }} />,
+    color: '#3498db',
+  },
+  system: {
+    icon: <IconNotification style={{ fontSize: '20px' }} />,
+    color: '#95a5a6',
+  },
+};
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-  const { sidebarCollapsed, toggleSidebar, currentPage, setCurrentPage } = useAppStore();
+  const { sidebarCollapsed, toggleSidebar, currentPage, setCurrentPage, notifications, getUnreadCount } = useAppStore();
   const [userMenuVisible, setUserMenuVisible] = useState(false);
+  const [notificationCenterVisible, setNotificationCenterVisible] = useState(false);
+  const lastNotificationIdRef = useRef<string | null>(null);
+  const unreadCount = getUnreadCount();
+
+  useEffect(() => {
+    if (notifications.length === 0) return;
+
+    const latestNotification = notifications[0];
+    if (latestNotification.id !== lastNotificationIdRef.current) {
+      lastNotificationIdRef.current = latestNotification.id;
+
+      const config = notificationTypeConfig[latestNotification.type];
+      Notification[latestNotification.type === 'inbound' || latestNotification.type === 'outbound' ? 'info' : 'success']({
+        title: latestNotification.title,
+        content: (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ color: config.color }}>{config.icon}</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: '600' }}>
+                {latestNotification.orderNo}
+              </span>
+            </div>
+            <div style={{ fontSize: '13px', color: '#666' }}>
+              {latestNotification.message}
+            </div>
+          </div>
+        ),
+        duration: 4000,
+        showIcon: false,
+      });
+    }
+  }, [notifications]);
 
   const getPageTitle = () => {
     const item = menuItems.find((m) => m.key === currentPage);
@@ -154,6 +208,16 @@ export default function Layout() {
             style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}
             onMouseLeave={() => setUserMenuVisible(false)}
           >
+            <Button
+              type="text"
+              icon={
+                <Badge count={unreadCount} dot={unreadCount > 0} maxCount={99}>
+                  <IconNotification style={{ fontSize: '20px', color: '#666' }} />
+                </Badge>
+              }
+              onClick={() => setNotificationCenterVisible(true)}
+              style={{ marginRight: '8px' }}
+            />
             <div
               style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}
               onClick={() => setUserMenuVisible(!userMenuVisible)}
@@ -222,6 +286,10 @@ export default function Layout() {
           WMS 仓库管理系统 © 2024 - Industrial Warehouse Management System
         </Footer>
       </ArcoLayout>
+      <NotificationCenter
+        visible={notificationCenterVisible}
+        onClose={() => setNotificationCenterVisible(false)}
+      />
     </ArcoLayout>
   );
 }

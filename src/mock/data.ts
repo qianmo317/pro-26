@@ -742,7 +742,7 @@ createOutboundOrderWithCustomer(
   '张三'
 );
 
-const pendingReviewOrder = createOutboundOrderWithCustomer(
+createOutboundOrderWithCustomer(
   '1',
   'pending_review',
   [

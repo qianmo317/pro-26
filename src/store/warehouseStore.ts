@@ -47,6 +47,7 @@ import {
   getABCClass,
   generateStockAgeData,
 } from '../mock/data';
+import { useAppStore } from './appStore';
 
 export interface InventorySummary {
   productId: string;
@@ -210,10 +211,17 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     };
   },
 
-  addInboundOrder: (order) =>
+  addInboundOrder: (order) => {
+    useAppStore.getState().addNotification({
+      type: 'inbound',
+      title: '新入库单待处理',
+      orderNo: order.orderNo,
+      message: `供应商: ${order.supplier}`,
+    });
     set((state) => ({
       inboundOrders: [...state.inboundOrders, order],
-    })),
+    }));
+  },
 
   updateInboundOrder: (id, order) =>
     set((state) => ({
@@ -222,10 +230,17 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       ),
     })),
 
-  addOutboundOrder: (order) =>
+  addOutboundOrder: (order) => {
+    useAppStore.getState().addNotification({
+      type: 'outbound',
+      title: '新出库单待处理',
+      orderNo: order.orderNo,
+      message: `客户: ${order.customer}`,
+    });
     set((state) => ({
       outboundOrders: [...state.outboundOrders, order],
-    })),
+    }));
+  },
 
   updateOutboundOrder: (id, order) =>
     set((state) => ({

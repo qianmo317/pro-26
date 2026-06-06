@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import { Grid, Card, Table, Tag, Radio } from '@arco-design/web-react';
-import { IconImport, IconExport, IconStorage, IconPlus, IconExclamation, IconInfoCircle, IconFire, IconMinus } from '@arco-design/web-react/icon';
+import {
+  IconImport,
+  IconExport,
+  IconStorage,
+  IconPlus,
+  IconExclamation,
+  IconInfoCircle,
+  IconFire,
+  IconMinus,
+  IconArrowRight,
+} from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
 import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
@@ -29,6 +39,47 @@ export default function Dashboard() {
 
   const lowStockCount = getLowStockCount();
   const overstockCount = getOverstockCount();
+
+  const pendingInboundCount = inboundOrders.filter((o) => o.status === 'pending').length;
+  const pendingOutboundCount = outboundOrders.filter((o) => o.status === 'pending').length;
+  const pendingStocktakeCount = stocktakePlans.filter((p) => p.status === 'pending').length;
+
+  const taskCards = [
+    {
+      title: '待处理入库',
+      count: pendingInboundCount,
+      type: 'inbound' as const,
+      icon: <IconImport style={{ fontSize: '32px' }} />,
+      color: '#ff7d00',
+      bgColor: 'rgba(255, 125, 0, 0.1)',
+      borderColor: 'rgba(255, 125, 0, 0.3)',
+      page: '/inbound',
+    },
+    {
+      title: '待处理出库',
+      count: pendingOutboundCount,
+      type: 'outbound' as const,
+      icon: <IconExport style={{ fontSize: '32px' }} />,
+      color: '#27ae60',
+      bgColor: 'rgba(39, 174, 96, 0.1)',
+      borderColor: 'rgba(39, 174, 96, 0.3)',
+      page: '/outbound',
+    },
+    {
+      title: '待处理盘点',
+      count: pendingStocktakeCount,
+      type: 'stocktake' as const,
+      icon: <IconPlus style={{ fontSize: '32px' }} />,
+      color: '#3498db',
+      bgColor: 'rgba(52, 152, 219, 0.1)',
+      borderColor: 'rgba(52, 152, 219, 0.3)',
+      page: '/stocktake',
+    },
+  ];
+
+  const handleTaskClick = (page: string) => {
+    navigate(page);
+  };
 
   const statCards = [
     {
@@ -292,6 +343,107 @@ export default function Dashboard() {
               <span style={{ fontSize: '12px', color: '#ff7d00' }}>点击查看详情 →</span>
             </div>
           </div>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{ marginTop: '24px' }}>
+        <Col span={24}>
+          <Card
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <IconExclamation style={{ color: '#ff7d00' }} />
+                <span>待处理任务</span>
+              </div>
+            }
+            className="chart-container"
+          >
+            <Row gutter={16}>
+              {taskCards.map((card, index) => (
+                <Col span={8} key={index}>
+                  <div
+                    onClick={() => handleTaskClick(card.page)}
+                    style={{
+                      padding: '20px',
+                      borderRadius: '12px',
+                      background: card.bgColor,
+                      border: `1px solid ${card.borderColor}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        right: '-20px',
+                        top: '-20px',
+                        width: '100px',
+                        height: '100px',
+                        borderRadius: '50%',
+                        background: card.color,
+                        opacity: 0.1,
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '12px' }}>
+                          {card.title}
+                        </div>
+                        <div
+                          style={{
+                            color: card.color,
+                            fontSize: '40px',
+                            fontWeight: '700',
+                            lineHeight: '1.2',
+                          }}
+                        >
+                          {card.count}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '13px',
+                            color: card.color,
+                            fontWeight: '500',
+                          }}
+                        >
+                          <span>点击查看</span>
+                          <IconArrowRight style={{ fontSize: '14px' }} />
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '12px',
+                          background: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: card.color,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                        }}
+                      >
+                        {card.icon}
+                      </div>
+                    </div>
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </Card>
         </Col>
       </Row>
 

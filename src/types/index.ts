@@ -447,11 +447,29 @@ export interface StockAgeFilter {
   zones: string[];
 }
 
+export type NotificationType = 'inbound' | 'outbound' | 'stocktake' | 'system';
+
+export interface TaskNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  orderNo: string;
+  message: string;
+  read: boolean;
+  createTime: string;
+}
+
 export interface AppState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   currentPage: string;
   setCurrentPage: (page: string) => void;
+  notifications: TaskNotification[];
+  addNotification: (notification: Omit<TaskNotification, 'id' | 'read' | 'createTime'>) => void;
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  clearAllNotifications: () => void;
+  getUnreadCount: () => number;
 }
 
 export interface LabelSize {
