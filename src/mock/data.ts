@@ -21,6 +21,22 @@ export const mockUser: User = {
   avatar: '',
 };
 
+export const mockManager: User = {
+  id: '2',
+  username: 'manager',
+  name: '仓库经理',
+  role: 'manager',
+  avatar: '',
+};
+
+export const mockOperator: User = {
+  id: '3',
+  username: 'operator',
+  name: '仓库操作员',
+  role: 'operator',
+  avatar: '',
+};
+
 export const mockSuppliers: Supplier[] = [
   {
     id: '1',
@@ -613,7 +629,7 @@ const getCustomerById = (id: string) => mockCustomers.find((c) => c.id === id);
 
 const createOutboundOrderWithCustomer = (
   customerId: string,
-  status: 'pending' | 'in_progress' | 'completed',
+  status: 'pending' | 'in_progress' | 'pending_review' | 'completed' | 'cancelled' | 'split',
   items: Array<{
     productId: string;
     planQuantity: number;
@@ -725,6 +741,120 @@ createOutboundOrderWithCustomer(
   '2024-06-02 11:00:00',
   '张三'
 );
+
+const pendingReviewOrder = createOutboundOrderWithCustomer(
+  '1',
+  'pending_review',
+  [
+    {
+      productId: '1',
+      planQuantity: 20,
+      actualQuantity: 20,
+      locationId: '1',
+      batchNo: 'BATCH20240501',
+    },
+    {
+      productId: '3',
+      planQuantity: 15,
+      actualQuantity: 15,
+      locationId: '8',
+      batchNo: 'BATCH20240505',
+    },
+  ],
+  '2024-06-04 09:30:00',
+  '2024-06-04 14:00:00',
+  '李四'
+);
+
+const reviewedOrder = createOutboundOrderWithCustomer(
+  '2',
+  'completed',
+  [
+    {
+      productId: '2',
+      planQuantity: 30,
+      actualQuantity: 30,
+      locationId: '5',
+      batchNo: 'BATCH20240515',
+    },
+  ],
+  '2024-06-03 08:00:00',
+  '2024-06-03 16:00:00',
+  '系统管理员'
+);
+
+if (reviewedOrder) {
+  reviewedOrder.reviewRecords = [
+    {
+      id: '1',
+      reviewer: '系统管理员',
+      reviewerRole: 'admin',
+      reviewTime: '2024-06-03 15:30:00',
+      reviewResult: 'pass',
+      reviewRemark: '复核通过，商品信息准确无误',
+      reviewItems: [
+        {
+          itemId: '1',
+          productId: '2',
+          productName: '精密轴承',
+          productSku: 'SKU-BR-001',
+          planQuantity: 30,
+          actualQuantity: 30,
+          checkQuantity: 30,
+          batchNo: 'BATCH20240515',
+          checkBatchNo: 'BATCH20240515',
+          checkPass: true,
+          checkRemark: '',
+        },
+      ],
+    },
+  ];
+}
+
+const failedReviewOrder = createOutboundOrderWithCustomer(
+  '5',
+  'in_progress',
+  [
+    {
+      productId: '7',
+      planQuantity: 25,
+      actualQuantity: 25,
+      locationId: '12',
+      batchNo: 'BATCH20240520',
+    },
+  ],
+  '2024-06-04 10:00:00',
+  '2024-06-04 15:00:00',
+  '王五'
+);
+
+if (failedReviewOrder) {
+  failedReviewOrder.reviewRecords = [
+    {
+      id: '1',
+      reviewer: '仓库经理',
+      reviewerRole: 'manager',
+      reviewTime: '2024-06-04 14:30:00',
+      reviewResult: 'fail',
+      reviewRemark: '批次号不匹配，实际批次为 BATCH20240521，请重新拣货',
+      reviewItems: [
+        {
+          itemId: '1',
+          productId: '7',
+          productName: '密封圈',
+          productSku: 'SKU-SE-001',
+          planQuantity: 25,
+          actualQuantity: 25,
+          checkQuantity: 25,
+          batchNo: 'BATCH20240520',
+          checkBatchNo: 'BATCH20240521',
+          checkPass: false,
+          checkRemark: '批次号不符',
+        },
+      ],
+    },
+  ];
+}
 
 export const mockStocktakePlans: StocktakePlan[] = [];
 

@@ -115,6 +115,30 @@ export interface InboundItem {
   expirationDate?: string;
 }
 
+export interface ReviewItem {
+  itemId: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  planQuantity: number;
+  actualQuantity: number;
+  checkQuantity: number;
+  batchNo?: string;
+  checkBatchNo?: string;
+  checkPass: boolean;
+  checkRemark?: string;
+}
+
+export interface ReviewRecord {
+  id: string;
+  reviewer: string;
+  reviewerRole: string;
+  reviewTime: string;
+  reviewResult: 'pass' | 'fail';
+  reviewRemark?: string;
+  reviewItems: ReviewItem[];
+}
+
 export interface OutboundOrder {
   id: string;
   orderNo: string;
@@ -123,7 +147,7 @@ export interface OutboundOrder {
   shippingAddress?: string;
   contact?: string;
   phone?: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'split';
+  status: 'pending' | 'in_progress' | 'pending_review' | 'completed' | 'cancelled' | 'split';
   items: OutboundItem[];
   createTime: string;
   updateTime: string;
@@ -134,6 +158,7 @@ export interface OutboundOrder {
   childIds?: string[];
   splitTime?: string;
   splitRemark?: string;
+  reviewRecords?: ReviewRecord[];
 }
 
 export interface OutboundSplitItem {

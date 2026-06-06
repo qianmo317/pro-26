@@ -26,6 +26,9 @@ import type {
   StockAgeData,
   StockAgeFilter,
   StockAgeItem,
+  ReviewRecord,
+  ReviewItem,
+  User,
 } from '../types';
 import {
   mockSuppliers,
@@ -118,6 +121,16 @@ interface WarehouseState {
   getCategories: () => string[];
   getZones: () => string[];
   exportOverageItems: (items: StockAgeItem[]) => void;
+  canReview: (user: User | null) => boolean;
+  submitForReview: (orderId: string, operator?: string) => void;
+  reviewOutboundOrder: (
+    orderId: string,
+    reviewResult: 'pass' | 'fail',
+    reviewItems: ReviewItem[],
+    reviewer: User,
+    reviewRemark?: string
+  ) => void;
+  getPendingReviewOrders: () => OutboundOrder[];
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -1063,5 +1076,69 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  },
+
+  canReview: (user) => {
+    if (!user) return false;
+    return user.role === 'admin' || user.role === 'manager';
+  },
+
+  submitForReview: (orderId, operator) => {
+    const state = get();
+    const order = state.outboundOrders.find((o) => o.id === orderId);
+    if (!order || order.status !== 'in_progress') return;
+
+    const now = new Date().toLocaleString();
+    set((state) => ({
+      outboundOrders: state.outboundOrders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: 'pending_review',
+              updateTime: now,
+              operator: operator || o.operator,
+            }
+          : o
+      ),
+    }));
+  },
+
+  reviewOutboundOrder: (orderId, reviewResult, reviewItems, reviewer, reviewRemark) => {
+    const state = get();
+    const order = state.outboundOrders.find((o) => o.id === orderId);
+    if (!order || order.status !== 'pending_review') return;
+
+    const now = new Date().toLocaleString();
+    const reviewRecord: ReviewRecord = {
+      id: String(Date.now()),
+      reviewer: reviewer.name,
+      reviewerRole: reviewer.role,
+      reviewTime: now,
+      reviewResult,
+      reviewRemark,
+      reviewItems,
+    };
+
+    const existingRecords = order.reviewRecords || [];
+    const newStatus = reviewResult === 'pass' ? 'completed' : 'in_progress';
+
+    set((state) => ({
+      outboundOrders: state.outboundOrders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: newStatus,
+              updateTime: now,
+              operator: reviewer.name,
+              reviewRecords: [...existingRecords, reviewRecord],
+            }
+          : o
+      ),
+    }));
+  },
+
+  getPendingReviewOrders: () => {
+    const state = get();
+    return state.outboundOrders.filter((o) => o.status === 'pending_review');
   },
 }));

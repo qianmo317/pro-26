@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Table,
   Button,
@@ -13,6 +13,9 @@ import {
   Progress,
   Divider,
   Descriptions,
+  Checkbox,
+  Alert,
+  Badge,
 } from '@arco-design/web-react';
 import {
   IconPlus,
@@ -20,10 +23,20 @@ import {
   IconUserAdd,
   IconSwap,
   IconInfoCircle,
+  IconCheck,
+  IconClose,
+  IconScan,
 } from '@arco-design/web-react/icon';
 import { useWarehouseStore } from '../store/warehouseStore';
+import { useAuthStore } from '../store/authStore';
 import { toast } from '../components/Toast';
-import type { OutboundOrder, OutboundItem, OutboundSplitSubOrder, OutboundSplitItem } from '../types';
+import type {
+  OutboundOrder,
+  OutboundItem,
+  OutboundSplitSubOrder,
+  OutboundSplitItem,
+  ReviewItem,
+} from '../types';
 import { useNavigate } from 'react-router-dom';
 
 const FormItem = Form.Item;
@@ -46,14 +59,33 @@ export default function Outbound() {
   const [modalVisible, setModalVisible] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [splitVisible, setSplitVisible] = useState(false);
+  const [reviewVisible, setReviewVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
+  const [reviewingOrder, setReviewingOrder] = useState<OutboundOrder | null>(null);
   const [splittingOrder, setSplittingOrder] = useState<OutboundOrder | null>(null);
   const [splitProducts, setSplitProducts] = useState<SplitFormItem[]>([]);
   const [subOrderCount, setSubOrderCount] = useState(2);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [reviewRemark, setReviewRemark] = useState('');
   const [form] = Form.useForm();
   const navigate = useNavigate();
-  const { outboundOrders, products, customers, addOutboundOrder, updateOutboundOrder, splitOutboundOrder, getChildOrders } =
-    useWarehouseStore();
+  const { user } = useAuthStore();
+  const {
+    outboundOrders,
+    products,
+    customers,
+    addOutboundOrder,
+    updateOutboundOrder,
+    splitOutboundOrder,
+    getChildOrders,
+    canReview,
+    submitForReview,
+    reviewOutboundOrder,
+    getPendingReviewOrders,
+  } = useWarehouseStore();
+
+  const hasReviewPermission = useMemo(() => canReview(user), [user, canReview]);
+  const pendingReviewCount = useMemo(() => getPendingReviewOrders().length, [getPendingReviewOrders]);
 
   const activeCustomers = customers.filter((c) => c.status === 'active');
 
@@ -84,6 +116,7 @@ export default function Outbound() {
     const statusMap: Record<string, { color: string; text: string }> = {
       pending: { color: 'orange', text: '待处理' },
       in_progress: { color: 'blue', text: '进行中' },
+      pending_review: { color: 'gold', text: '待复核' },
       completed: { color: 'green', text: '已完成' },
       cancelled: { color: 'red', text: '已取消' },
       split: { color: 'purple', text: '已拆分' },
@@ -178,7 +211,7 @@ export default function Outbound() {
     },
     {
       title: '操作',
-      width: 280,
+      width: 360,
       render: (_: unknown, record: OutboundOrder) => (
         <Space wrap>
           <Button
@@ -206,10 +239,30 @@ export default function Outbound() {
             <Button
               type="text"
               size="small"
-              status="success"
-              onClick={() => handleCompleteOutbound(record.id)}
+              status="warning"
+              onClick={() => handleSubmitForReview(record.id)}
             >
-              完成出库
+              提交复核
+            </Button>
+          )}
+          {record.status === 'pending_review' && hasReviewPermission && (
+            <Button
+              type="text"
+              size="small"
+              status="success"
+              icon={<IconScan />}
+              onClick={() => handleOpenReview(record)}
+            >
+              复核
+            </Button>
+          )}
+          {record.status === 'pending_review' && !hasReviewPermission && (
+            <Button
+              type="text"
+              size="small"
+              disabled
+            >
+              待复核
             </Button>
           )}
           {record.status === 'pending' && !record.parentId && (
@@ -245,9 +298,75 @@ export default function Outbound() {
     toast.success('已开始出库流程');
   };
 
-  const handleCompleteOutbound = (id: string) => {
-    updateOutboundOrder(id, { status: 'completed' });
-    toast.success('出库完成');
+  const handleSubmitForReview = (id: string) => {
+    submitForReview(id, user?.name);
+    toast.success('已提交复核，请等待复核人员审核');
+  };
+
+  const handleOpenReview = (order: OutboundOrder) => {
+    if (!hasReviewPermission) {
+      toast.error('您没有复核权限，请联系管理员或经理进行复核');
+      return;
+    }
+    const initialReviewItems: ReviewItem[] = order.items.map((item) => ({
+      itemId: item.id,
+      productId: item.productId,
+      productName: item.productName,
+      productSku: item.productSku,
+      planQuantity: item.planQuantity,
+      actualQuantity: item.actualQuantity || item.planQuantity,
+      checkQuantity: item.actualQuantity || item.planQuantity,
+      batchNo: item.batchNo,
+      checkBatchNo: item.batchNo || '',
+      checkPass: true,
+      checkRemark: '',
+    }));
+    setReviewItems(initialReviewItems);
+    setReviewRemark('');
+    setReviewingOrder(order);
+    setReviewVisible(true);
+  };
+
+  const handleReviewItemChange = (index: number, field: keyof ReviewItem, value: unknown) => {
+    setReviewItems((prev) => {
+      const newItems = [...prev];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return newItems;
+    });
+  };
+
+  const handleReviewSubmit = (result: 'pass' | 'fail') => {
+    if (!reviewingOrder || !user) return;
+
+    const allPass = reviewItems.every((item) => item.checkPass);
+    if (result === 'pass' && !allPass) {
+      Modal.confirm({
+        title: '复核确认',
+        content: '存在复核不通过的商品，确认要整体通过复核吗？',
+        onOk: () => {
+          doReview(result);
+        },
+      });
+      return;
+    }
+
+    doReview(result);
+  };
+
+  const doReview = (result: 'pass' | 'fail') => {
+    if (!reviewingOrder || !user) return;
+
+    reviewOutboundOrder(
+      reviewingOrder.id,
+      result,
+      reviewItems,
+      user,
+      reviewRemark
+    );
+
+    toast.success(result === 'pass' ? '复核通过，出库完成' : '复核不通过，已退回重新拣货');
+    setReviewVisible(false);
+    setReviewingOrder(null);
   };
 
   const handleSubmit = (values: OutboundFormValues) => {
@@ -507,6 +626,18 @@ export default function Outbound() {
             rowKey="id"
           />
         </TabPane>
+        <TabPane key="pending_review" title={
+          <Space>
+            待复核
+            {pendingReviewCount > 0 && <Badge count={pendingReviewCount} color="gold" />}
+          </Space>
+        }>
+          <Table
+            columns={columns}
+            data={outboundOrders.filter((o) => o.status === 'pending_review')}
+            rowKey="id"
+          />
+        </TabPane>
         <TabPane key="split" title="已拆分">
           <Table
             columns={columns}
@@ -697,6 +828,144 @@ export default function Outbound() {
                 />
               </>
             )}
+
+            {selectedOrder.reviewRecords && selectedOrder.reviewRecords.length > 0 && (
+              <>
+                <Divider />
+                <div style={{ marginBottom: '12px', fontWeight: '500' }}>
+                  复核记录
+                </div>
+                {selectedOrder.reviewRecords.map((record, recordIdx) => (
+                  <div
+                    key={record.id}
+                    style={{
+                      marginBottom: '16px',
+                      padding: '12px',
+                      border: '1px solid #e5e6eb',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <Space>
+                        <Tag
+                          color={record.reviewResult === 'pass' ? 'green' : 'red'}
+                          icon={
+                            record.reviewResult === 'pass' ? <IconCheck /> : <IconClose />
+                          }
+                        >
+                          {record.reviewResult === 'pass' ? '复核通过' : '复核不通过'}
+                        </Tag>
+                        <span style={{ fontWeight: '500' }}>第 {recordIdx + 1} 次复核</span>
+                      </Space>
+                      <Space size="large">
+                        <span style={{ fontSize: '12px', color: '#86909c' }}>
+                          复核人：{record.reviewer} ({record.reviewerRole})
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#86909c' }}>
+                          {record.reviewTime}
+                        </span>
+                      </Space>
+                    </div>
+                    {record.reviewRemark && (
+                      <div
+                        style={{
+                          marginBottom: '8px',
+                          padding: '8px',
+                          background: '#f7f8fa',
+                          borderRadius: '4px',
+                          fontSize: '13px',
+                        }}
+                      >
+                        复核备注：{record.reviewRemark}
+                      </div>
+                    )}
+                    <Table
+                      columns={[
+                        {
+                          title: '商品名称',
+                          dataIndex: 'productName',
+                          width: 140,
+                        },
+                        {
+                          title: 'SKU',
+                          dataIndex: 'productSku',
+                          width: 120,
+                        },
+                        {
+                          title: '计划数量',
+                          dataIndex: 'planQuantity',
+                          width: 90,
+                        },
+                        {
+                          title: '实际数量',
+                          dataIndex: 'actualQuantity',
+                          width: 90,
+                        },
+                        {
+                          title: '复核数量',
+                          dataIndex: 'checkQuantity',
+                          width: 90,
+                          render: (qty: number, record: ReviewItem) => (
+                            <span
+                              style={{
+                                color: qty !== record.actualQuantity ? '#f53f3f' : '#000',
+                              }}
+                            >
+                              {qty}
+                            </span>
+                          ),
+                        },
+                        {
+                          title: '原批次',
+                          dataIndex: 'batchNo',
+                          width: 100,
+                          render: (code: string) => code || '-',
+                        },
+                        {
+                          title: '复核批次',
+                          dataIndex: 'checkBatchNo',
+                          width: 100,
+                          render: (code: string, record: ReviewItem) => (
+                            <span
+                              style={{
+                                color: code !== record.batchNo ? '#f53f3f' : '#000',
+                              }}
+                            >
+                              {code || '-'}
+                            </span>
+                          ),
+                        },
+                        {
+                          title: '复核结果',
+                          dataIndex: 'checkPass',
+                          width: 90,
+                          render: (pass: boolean) => (
+                            <Tag color={pass ? 'green' : 'red'}>
+                              {pass ? '通过' : '不通过'}
+                            </Tag>
+                          ),
+                        },
+                        {
+                          title: '备注',
+                          dataIndex: 'checkRemark',
+                          render: (remark: string) => remark || '-',
+                        },
+                      ]}
+                      data={record.reviewItems}
+                      pagination={false}
+                      size="small"
+                    />
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
       </Modal>
@@ -838,6 +1107,171 @@ export default function Outbound() {
             }}>
               <IconInfoCircle style={{ marginRight: '4px' }} />
               拆分后原单状态变为"已拆分"，各子单独立流转。请确保每个商品的分配数量之和等于原计划数量。
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <IconScan />
+            出库复核
+          </div>
+        }
+        visible={reviewVisible}
+        onCancel={() => setReviewVisible(false)}
+        style={{ width: 1000 }}
+        footer={null}
+        maskClosable={false}
+      >
+        {reviewingOrder && (
+          <div>
+            <Alert
+              type="info"
+              content={
+                <div>
+                  <div style={{ fontWeight: '500', marginBottom: '4px' }}>
+                    出库单：{reviewingOrder.orderNo} | 客户：{reviewingOrder.customer}
+                  </div>
+                  <div style={{ fontSize: '12px' }}>
+                    请仔细核对每个商品的 SKU、批次号和数量，确保出库准确。
+                  </div>
+                </div>
+              }
+              style={{ marginBottom: '16px' }}
+            />
+
+            <div style={{ marginBottom: '12px', fontWeight: '500' }}>
+              复核明细
+            </div>
+
+            <Table
+              columns={[
+                {
+                  title: '商品名称',
+                  dataIndex: 'productName',
+                  width: 140,
+                },
+                {
+                  title: 'SKU',
+                  dataIndex: 'productSku',
+                  width: 120,
+                  render: (sku: string) => (
+                    <span style={{ fontFamily: 'monospace', background: '#f2f3f5', padding: '2px 6px', borderRadius: '2px' }}>
+                      {sku}
+                    </span>
+                  ),
+                },
+                {
+                  title: '计划数量',
+                  dataIndex: 'planQuantity',
+                  width: 90,
+                },
+                {
+                  title: '拣货数量',
+                  dataIndex: 'actualQuantity',
+                  width: 90,
+                },
+                {
+                  title: '复核数量',
+                  dataIndex: 'checkQuantity',
+                  width: 130,
+                  render: (_: unknown, record: ReviewItem, index: number) => (
+                    <InputNumber
+                      min={0}
+                      value={record.checkQuantity}
+                      onChange={(value) =>
+                        handleReviewItemChange(index, 'checkQuantity', value as number)
+                      }
+                      style={{ width: '100%' }}
+                    />
+                  ),
+                },
+                {
+                  title: '原批次',
+                  dataIndex: 'batchNo',
+                  width: 100,
+                  render: (code: string) => code || '-',
+                },
+                {
+                  title: '复核批次',
+                  dataIndex: 'checkBatchNo',
+                  width: 130,
+                  render: (_: unknown, record: ReviewItem, index: number) => (
+                    <Input
+                      placeholder="扫描或输入批次"
+                      value={record.checkBatchNo}
+                      onChange={(value) =>
+                        handleReviewItemChange(index, 'checkBatchNo', value)
+                      }
+                    />
+                  ),
+                },
+                {
+                  title: '核对通过',
+                  dataIndex: 'checkPass',
+                  width: 90,
+                  render: (_: unknown, record: ReviewItem, index: number) => (
+                    <Checkbox
+                      checked={record.checkPass}
+                      onChange={(checked) =>
+                        handleReviewItemChange(index, 'checkPass', checked)
+                      }
+                    />
+                  ),
+                },
+                {
+                  title: '备注',
+                  dataIndex: 'checkRemark',
+                  width: 140,
+                  render: (_: unknown, record: ReviewItem, index: number) => (
+                    <Input
+                      placeholder="差异说明"
+                      value={record.checkRemark}
+                      onChange={(value) =>
+                        handleReviewItemChange(index, 'checkRemark', value)
+                      }
+                    />
+                  ),
+                },
+              ]}
+              data={reviewItems}
+              pagination={false}
+              size="small"
+              scroll={{ y: 300 }}
+            />
+
+            <Divider />
+
+            <FormItem label="复核备注" field="reviewRemark" style={{ marginBottom: '16px' }}>
+              <TextArea
+                placeholder="请输入复核备注信息（可选）"
+                value={reviewRemark}
+                onChange={setReviewRemark}
+                style={{ minHeight: '60px' }}
+              />
+            </FormItem>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <Button onClick={() => setReviewVisible(false)}>
+                取消
+              </Button>
+              <Button
+                status="danger"
+                icon={<IconClose />}
+                onClick={() => handleReviewSubmit('fail')}
+              >
+                复核不通过，退回重拣
+              </Button>
+              <Button
+                type="primary"
+                status="success"
+                icon={<IconCheck />}
+                onClick={() => handleReviewSubmit('pass')}
+              >
+                复核通过，完成出库
+              </Button>
             </div>
           </div>
         )}

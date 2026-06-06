@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthState } from '../types';
-import { mockUser } from '../mock/data';
+import { mockUser, mockManager, mockOperator } from '../mock/data';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -11,10 +11,20 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       login: async (username: string, password: string) => {
         await new Promise((resolve) => setTimeout(resolve, 800));
+        
+        let user = null;
         if (username === 'admin' && password === 'admin123') {
+          user = mockUser;
+        } else if (username === 'manager' && password === 'manager123') {
+          user = mockManager;
+        } else if (username === 'operator' && password === 'operator123') {
+          user = mockOperator;
+        }
+        
+        if (user) {
           const token = 'mock-token-' + Date.now();
           set({
-            user: mockUser,
+            user,
             token,
             isAuthenticated: true,
           });

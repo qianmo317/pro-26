@@ -89,7 +89,9 @@ export default function Login() {
           </FormItem>
         </Form>
         <div style={{ textAlign: 'center', color: '#999', fontSize: '12px', marginTop: '24px' }}>
-          <p>默认账号: admin / admin123</p>
+          <p style={{ margin: '4px 0' }}>管理员: admin / admin123 (有复核权限)</p>
+          <p style={{ margin: '4px 0' }}>经理: manager / manager123 (有复核权限)</p>
+          <p style={{ margin: '4px 0' }}>操作员: operator / operator123 (无复核权限)</p>
         </div>
       </div>
     </div>
