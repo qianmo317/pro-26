@@ -114,6 +114,7 @@ interface WarehouseState {
   getCustomerStats: (customerId: string) => CustomerStats;
   addInboundOrder: (order: InboundOrder) => void;
   updateInboundOrder: (id: string, order: Partial<InboundOrder>) => void;
+  restoreInboundOrder: (id: string) => void;
   addOutboundOrder: (order: OutboundOrder) => void;
   updateOutboundOrder: (id: string, order: Partial<OutboundOrder>) => void;
   updateStocktakeItem: (planId: string, itemId: string, actual: number) => void;
@@ -310,16 +311,36 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     const existingOrder = state.inboundOrders.find((o) => o.id === id);
     if (!existingOrder) return;
 
-    if (order.status === 'completed') {
-      for (const item of existingOrder.items) {
-        if (item.locationId && state.isLocationLocked(item.locationId)) {
-          const loc = state.locations.find((l) => l.id === item.locationId);
-          throw new Error(`库位 ${loc?.code || item.locationId} 已被锁定，禁止入库。原因：${loc?.lockReason || '无'}`);
+    if (order.status && order.status !== existingOrder.status) {
+      const validTransitions: Record<string, string[]> = {
+        pending: ['in_progress', 'cancelled'],
+        in_progress: ['completed', 'cancelled'],
+        completed: [],
+        cancelled: ['in_progress'],
+      };
+
+      const allowedTransitions = validTransitions[existingOrder.status] || [];
+      if (!allowedTransitions.includes(order.status)) {
+        const statusMap: Record<string, string> = {
+          pending: '待处理',
+          in_progress: '处理中',
+          completed: '已完成',
+          cancelled: '已取消',
+        };
+        throw new Error(
+          `非法状态跳转: 无法从 ${statusMap[existingOrder.status] || existingOrder.status} 变更为 ${statusMap[order.status] || order.status}`
+        );
+      }
+
+      if (order.status === 'completed') {
+        for (const item of existingOrder.items) {
+          if (item.locationId && state.isLocationLocked(item.locationId)) {
+            const loc = state.locations.find((l) => l.id === item.locationId);
+            throw new Error(`库位 ${loc?.code || item.locationId} 已被锁定，禁止入库。原因：${loc?.lockReason || '无'}`);
+          }
         }
       }
-    }
 
-    if (order.status && order.status !== existingOrder.status) {
       const user = useAuthStore.getState().user;
       if (user) {
         const statusMap: Record<string, string> = {
@@ -347,6 +368,88 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
           remark: `入库单状态从 ${statusMap[existingOrder.status]} 变更为 ${statusMap[order.status]}`,
         });
       }
+
+      if (order.status === 'completed') {
+        const newInventory = [...state.inventory];
+        const newLocations = [...state.locations];
+        const newChangeRecords = [...state.inventoryChangeRecords];
+        const now = new Date().toLocaleString();
+        let recordId = newChangeRecords.length + 1;
+        const operatorName = user?.name || existingOrder.operator || '系统';
+
+        existingOrder.items.forEach((item) => {
+          if (item.receivedQuantity <= 0 || !item.locationId) return;
+
+          const invIndex = newInventory.findIndex(
+            (inv) =>
+              inv.productId === item.productId &&
+              inv.locationId === item.locationId &&
+              inv.batchNo === item.batchNo
+          );
+
+          let newBalance = item.receivedQuantity;
+
+          if (invIndex > -1) {
+            const inv = newInventory[invIndex];
+            inv.quantity += item.receivedQuantity;
+            inv.updateTime = now;
+            newBalance = inv.quantity;
+          } else {
+            newInventory.push({
+              id: String(Date.now() + Math.random()),
+              productId: item.productId,
+              productName: item.productName,
+              productSku: item.productSku,
+              locationId: item.locationId,
+              locationCode: item.locationCode || '',
+              quantity: item.receivedQuantity,
+              batchNo: item.batchNo,
+              productionDate: item.productionDate,
+              expirationDate: item.expirationDate,
+              updateTime: now,
+            });
+          }
+
+          const locIndex = newLocations.findIndex((l) => l.id === item.locationId);
+          if (locIndex > -1) {
+            const loc = newLocations[locIndex];
+            loc.current += item.receivedQuantity;
+            loc.status =
+              loc.current === 0
+                ? 'empty'
+                : loc.current >= loc.capacity
+                ? 'full'
+                : 'normal';
+          }
+
+          newChangeRecords.unshift({
+            id: String(recordId++),
+            type: 'inbound',
+            productId: item.productId,
+            productName: item.productName,
+            productSku: item.productSku,
+            locationId: item.locationId,
+            locationCode: item.locationCode || '',
+            batchNo: item.batchNo,
+            quantity: item.receivedQuantity,
+            balanceAfter: newBalance,
+            orderNo: existingOrder.orderNo,
+            operator: operatorName,
+            operateTime: now,
+            remark: `入库: ${item.productName} x ${item.receivedQuantity}`,
+          });
+        });
+
+        set((state) => ({
+          inventory: newInventory,
+          locations: newLocations,
+          inventoryChangeRecords: newChangeRecords,
+          inboundOrders: state.inboundOrders.map((o) =>
+            o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
+          ),
+        }));
+        return;
+      }
     }
 
     set((state) => ({
@@ -354,6 +457,14 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
         o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
       ),
     }));
+  },
+
+  restoreInboundOrder: (id) => {
+    const state = get();
+    const existingOrder = state.inboundOrders.find((o) => o.id === id);
+    if (!existingOrder || existingOrder.status !== 'cancelled') return;
+
+    get().updateInboundOrder(id, { status: 'in_progress' });
   },
 
   addOutboundOrder: (order) => {
@@ -2118,20 +2229,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       const order = state.inboundOrders.find((o) => o.id === actualId);
       if (!order) return;
 
-      if (newStatus === 'completed') {
-        for (const item of order.items) {
-          if (item.locationId && state.isLocationLocked(item.locationId)) {
-            const loc = state.locations.find((l) => l.id === item.locationId);
-            throw new Error(`库位 ${loc?.code || item.locationId} 已被锁定，禁止入库。`);
-          }
-        }
-      }
-
-      set((state) => ({
-        inboundOrders: state.inboundOrders.map((o) =>
-          o.id === actualId ? { ...o, status: newStatus, updateTime: new Date().toLocaleString() } : o
-        ),
-      }));
+      get().updateInboundOrder(actualId, { status: newStatus });
 
       useAppStore.getState().addNotification({
         type: 'inbound',

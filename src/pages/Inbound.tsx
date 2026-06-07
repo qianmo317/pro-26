@@ -63,7 +63,7 @@ export default function Inbound() {
   const [closeForm] = Form.useForm<CloseFormValues>();
   const [confirmForm] = Form.useForm<CloseFormValues>();
   const [form] = Form.useForm();
-  const { suppliers, inboundOrders, products, locations, addInboundOrder, updateInboundOrder } =
+  const { suppliers, inboundOrders, products, locations, addInboundOrder, updateInboundOrder, restoreInboundOrder } =
     useWarehouseStore();
 
   const activeSuppliers = useMemo(
@@ -240,6 +240,16 @@ export default function Inbound() {
               </Button>
             </>
           )}
+          {record.status === 'cancelled' && (
+            <Button
+              type="text"
+              size="small"
+              status="warning"
+              onClick={() => handleRestoreInbound(record.id)}
+            >
+              恢复
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -351,6 +361,15 @@ export default function Inbound() {
       setCloseModalVisible(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '操作失败');
+    }
+  };
+
+  const handleRestoreInbound = (id: string) => {
+    try {
+      restoreInboundOrder(id);
+      toast.success('入库单已恢复');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '恢复失败');
     }
   };
 
