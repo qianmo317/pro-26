@@ -57,6 +57,7 @@ export default function Stocktake() {
   const user = useAuthStore((state) => state.user);
   const {
     stocktakePlans,
+    addStocktakePlan,
     updateStocktakeItem,
     completeStocktake,
     cycleCountConfigs,
@@ -214,10 +215,22 @@ export default function Stocktake() {
     updateStocktakeItem(planId, itemId, value);
   };
 
-  const handleSubmit = (_values: any) => {
-    toast.success('盘点计划创建成功（演示模式）');
-    setModalVisible(false);
-    createForm.resetFields();
+  const handleSubmit = (values: any) => {
+    const newPlan = addStocktakePlan({
+      name: values.name,
+      type: values.type,
+      zones: values.zone,
+      startTime: values.startTime ? values.startTime.toLocaleString() : undefined,
+      remark: values.remark,
+    });
+
+    if (newPlan) {
+      toast.success('盘点计划创建成功');
+      setModalVisible(false);
+      createForm.resetFields();
+    } else {
+      toast.error('盘点计划创建失败，所选区域无库存数据');
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {

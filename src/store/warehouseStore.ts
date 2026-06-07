@@ -117,6 +117,7 @@ interface WarehouseState {
   restoreInboundOrder: (id: string) => void;
   addOutboundOrder: (order: OutboundOrder) => void;
   updateOutboundOrder: (id: string, order: Partial<OutboundOrder>) => void;
+  addStocktakePlan: (plan: Omit<StocktakePlan, 'id' | 'planNo' | 'items' | 'status' | 'createTime' | 'locationIds'> & { zones?: string[] }) => StocktakePlan;
   updateStocktakeItem: (planId: string, itemId: string, actual: number) => void;
   completeStocktake: (planId: string) => void;
   getDifferenceItemsByPlan: (planId: string) => StockDifferenceItem[];
@@ -541,6 +542,94 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
         o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
       ),
     }));
+  },
+
+  addStocktakePlan: (planData) => {
+    const state = get();
+    const now = new Date().toLocaleString();
+    const planNo = `STK-${Date.now()}`;
+
+    const locationIds = new Set<string>();
+    const items: StocktakePlan['items'] = [];
+
+    let inventoryToUse = state.inventory;
+    if (planData.zones && planData.zones.length > 0) {
+      inventoryToUse = state.inventory.filter((inv) => {
+        const location = state.locations.find((l) => l.id === inv.locationId);
+        return location && planData.zones!.includes(location.zone);
+      });
+    }
+
+    if (planData.type === 'partial') {
+      const count = Math.min(20, Math.floor(inventoryToUse.length * 0.3));
+      const shuffled = [...inventoryToUse].sort(() => Math.random() - 0.5);
+      inventoryToUse = shuffled.slice(0, count);
+    }
+
+    inventoryToUse.forEach((inv, idx) => {
+      locationIds.add(inv.locationId);
+      items.push({
+        id: `${planNo}-${idx + 1}`,
+        inventoryId: inv.id,
+        productId: inv.productId,
+        productName: inv.productName,
+        productSku: inv.productSku,
+        locationId: inv.locationId,
+        locationCode: inv.locationCode,
+        systemQuantity: inv.quantity,
+        actualQuantity: 0,
+        diffQuantity: 0,
+        status: 'pending',
+        batchNo: inv.batchNo,
+      });
+    });
+
+    const user = useAuthStore.getState().user;
+    const operatorName = user?.name || '系统管理员';
+
+    const newPlan: StocktakePlan = {
+      id: planNo,
+      planNo,
+      name: planData.name,
+      type: planData.type,
+      status: 'pending',
+      locationIds: Array.from(locationIds),
+      items,
+      createTime: now,
+      startTime: planData.startTime,
+      operator: operatorName,
+      remark: planData.remark,
+    };
+
+    if (user) {
+      get().addOperationLog({
+        operatorId: user.id,
+        operatorName: user.name,
+        operationType: 'stocktake_create',
+        targetType: 'stocktake',
+        targetId: newPlan.id,
+        targetName: newPlan.planNo,
+        fieldChanges: [
+          { field: 'name', fieldName: '盘点名称', oldValue: null, newValue: newPlan.name },
+          { field: 'type', fieldName: '盘点类型', oldValue: null, newValue: newPlan.type === 'full' ? '全盘' : newPlan.type === 'partial' ? '部分盘点' : '循环盘点' },
+          { field: 'itemCount', fieldName: '商品项数', oldValue: null, newValue: items.length },
+        ],
+        remark: `创建盘点计划：${newPlan.name}`,
+      });
+    }
+
+    useAppStore.getState().addNotification({
+      type: 'stocktake',
+      title: '新盘点计划待处理',
+      orderNo: newPlan.planNo,
+      message: `盘点名称: ${newPlan.name}`,
+    });
+
+    set((state) => ({
+      stocktakePlans: [...state.stocktakePlans, newPlan],
+    }));
+
+    return newPlan;
   },
 
   updateStocktakeItem: (planId, itemId, actual) => {
