@@ -21,6 +21,7 @@ import {
   IconSchedule,
   IconNotification,
   IconCamera,
+  IconCommand,
 } from '@arco-design/web-react/icon';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -48,6 +49,7 @@ const menuItems = [
   { key: 'supplier', icon: <IconUserGroup />, text: '供应商管理' },
   { key: 'customer', icon: <IconUserAdd />, text: '客户管理' },
   { key: 'report', icon: <IconFile />, text: '报表分析' },
+  { key: 'operation-log', icon: <IconCommand />, text: '操作日志' },
 ];
 
 const notificationTypeConfig: Record<NotificationType, { icon: React.ReactNode; color: string }> = {

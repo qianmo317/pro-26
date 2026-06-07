@@ -16,6 +16,7 @@ import Customer from '../pages/Customer';
 import Product from '../pages/Product';
 import InventorySnapshot from '../pages/InventorySnapshot';
 import TaskBoard from '../pages/TaskBoard';
+import OperationLog from '../pages/OperationLog';
 import { useAuthStore } from '../store/authStore';
 
 const ProtectedRoute = ({ children }: { children: ReactElement }) => {
@@ -98,6 +99,10 @@ export const router = createBrowserRouter([
       {
         path: 'task-board',
         element: <TaskBoard />,
+      },
+      {
+        path: 'operation-log',
+        element: <OperationLog />,
       },
     ],
   },

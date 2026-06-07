@@ -42,7 +42,11 @@ import type {
   InboundItem,
   OutboundItem,
   StocktakeItem,
+  OperationLog,
+  OperationLogType,
+  OperationLogFilter,
 } from '../types';
+import { OperationLogTypeLabels } from '../types';
 import {
   mockSuppliers,
   mockCustomers,
@@ -59,6 +63,7 @@ import {
   mockCycleCountConfigs,
   mockStockDifferenceItems,
   mockStockAdjustmentOrders,
+  mockOperationLogs,
   LARGE_DIFF_THRESHOLD,
   generateDifferenceItemsFromPlan,
   getABCClass,
@@ -66,6 +71,7 @@ import {
   generateABCAnalysisData,
 } from '../mock/data';
 import { useAppStore } from './appStore';
+import { useAuthStore } from './authStore';
 import * as XLSX from 'xlsx';
 
 export interface InventorySummary {
@@ -97,6 +103,7 @@ interface WarehouseState {
   cycleCountConfigs: CycleCountConfig[];
   stockDifferenceItems: StockDifferenceItem[];
   stockAdjustmentOrders: StockAdjustmentOrder[];
+  operationLogs: OperationLog[];
   largeDiffThreshold: number;
   addSupplier: (supplier: Supplier) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
@@ -177,6 +184,11 @@ interface WarehouseState {
     order: InboundOrder | OutboundOrder | StocktakePlan | null;
     items: (InboundItem | OutboundItem | StocktakeItem)[];
   } | null;
+  addOperationLog: (log: Omit<OperationLog, 'id' | 'operateTime' | 'operatorRole' | 'operationTypeName'>) => void;
+  getOperationLogs: (filter?: OperationLogFilter, currentUser?: User | null) => OperationLog[];
+  getOperationLogById: (id: string, currentUser?: User | null) => OperationLog | null;
+  getOperationTypes: () => { value: OperationLogType; label: string }[];
+  getOperators: () => { value: string; label: string }[];
 }
 
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
@@ -195,6 +207,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
   cycleCountConfigs: mockCycleCountConfigs,
   stockDifferenceItems: mockStockDifferenceItems,
   stockAdjustmentOrders: mockStockAdjustmentOrders,
+  operationLogs: mockOperationLogs,
   largeDiffThreshold: LARGE_DIFF_THRESHOLD,
 
   addSupplier: (supplier) =>
@@ -266,6 +279,27 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       orderNo: order.orderNo,
       message: `供应商: ${order.supplier}`,
     });
+    
+    if (order.operator) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'inbound_create',
+          targetType: 'inbound',
+          targetId: order.id,
+          targetName: order.orderNo,
+          fieldChanges: [
+            { field: 'supplier', fieldName: '供应商', oldValue: null, newValue: order.supplier },
+            { field: 'status', fieldName: '状态', oldValue: null, newValue: '待处理' },
+            { field: 'itemCount', fieldName: '商品项数', oldValue: null, newValue: order.items.length },
+          ],
+          remark: `创建入库单，供应商: ${order.supplier}`,
+        });
+      }
+    }
+    
     set((state) => ({
       inboundOrders: [...state.inboundOrders, order],
     }));
@@ -285,6 +319,36 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       }
     }
 
+    if (order.status && order.status !== existingOrder.status) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const statusMap: Record<string, string> = {
+          pending: '待处理',
+          in_progress: '处理中',
+          completed: '已完成',
+          cancelled: '已取消',
+        };
+        
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'inbound_status_change',
+          targetType: 'inbound',
+          targetId: existingOrder.id,
+          targetName: existingOrder.orderNo,
+          fieldChanges: [
+            {
+              field: 'status',
+              fieldName: '状态',
+              oldValue: statusMap[existingOrder.status] || existingOrder.status,
+              newValue: statusMap[order.status] || order.status,
+            },
+          ],
+          remark: `入库单状态从 ${statusMap[existingOrder.status]} 变更为 ${statusMap[order.status]}`,
+        });
+      }
+    }
+
     set((state) => ({
       inboundOrders: state.inboundOrders.map((o) =>
         o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
@@ -299,19 +363,100 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       orderNo: order.orderNo,
       message: `客户: ${order.customer}`,
     });
+    
+    if (order.operator) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'outbound_create',
+          targetType: 'outbound',
+          targetId: order.id,
+          targetName: order.orderNo,
+          fieldChanges: [
+            { field: 'customer', fieldName: '客户', oldValue: null, newValue: order.customer },
+            { field: 'status', fieldName: '状态', oldValue: null, newValue: '待处理' },
+            { field: 'itemCount', fieldName: '商品项数', oldValue: null, newValue: order.items.length },
+          ],
+          remark: `创建出库单，客户: ${order.customer}`,
+        });
+      }
+    }
+    
     set((state) => ({
       outboundOrders: [...state.outboundOrders, order],
     }));
   },
 
-  updateOutboundOrder: (id, order) =>
+  updateOutboundOrder: (id, order) => {
+    const state = get();
+    const existingOrder = state.outboundOrders.find((o) => o.id === id);
+    
+    if (order.status && existingOrder && order.status !== existingOrder.status) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const statusMap: Record<string, string> = {
+          pending: '待处理',
+          in_progress: '处理中',
+          pending_review: '待复核',
+          completed: '已完成',
+          cancelled: '已取消',
+          split: '已拆分',
+        };
+        
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'outbound_status_change',
+          targetType: 'outbound',
+          targetId: existingOrder.id,
+          targetName: existingOrder.orderNo,
+          fieldChanges: [
+            {
+              field: 'status',
+              fieldName: '状态',
+              oldValue: statusMap[existingOrder.status] || existingOrder.status,
+              newValue: statusMap[order.status] || order.status,
+            },
+          ],
+          remark: `出库单状态从 ${statusMap[existingOrder.status]} 变更为 ${statusMap[order.status]}`,
+        });
+      }
+    }
+    
     set((state) => ({
       outboundOrders: state.outboundOrders.map((o) =>
-        o.id === id ? { ...o, ...order } : o
+        o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
       ),
-    })),
+    }));
+  },
 
-  updateStocktakeItem: (planId, itemId, actual) =>
+  updateStocktakeItem: (planId, itemId, actual) => {
+    const state = get();
+    const plan = state.stocktakePlans.find((p) => p.id === planId);
+    const item = plan?.items.find((i) => i.id === itemId);
+    
+    if (plan && item) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'stocktake_result_edit',
+          targetType: 'stocktake_item',
+          targetId: item.id,
+          targetName: item.productName,
+          fieldChanges: [
+            { field: 'systemQuantity', fieldName: '系统数量', oldValue: item.systemQuantity, newValue: item.systemQuantity },
+            { field: 'actualQuantity', fieldName: '实际数量', oldValue: item.actualQuantity, newValue: actual },
+            { field: 'diffQuantity', fieldName: '差异数量', oldValue: item.diffQuantity, newValue: actual - item.systemQuantity },
+          ],
+          remark: `盘点结果录入: ${item.productSku} @ ${item.locationCode}`,
+        });
+      }
+    }
+    
     set((state) => ({
       stocktakePlans: state.stocktakePlans.map((plan) =>
         plan.id === planId
@@ -330,12 +475,41 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
             }
           : plan
       ),
-    })),
+    }));
+  },
 
   completeStocktake: (planId) => {
     const state = get();
     const plan = state.stocktakePlans.find((p) => p.id === planId);
     if (!plan) return;
+
+    const user = useAuthStore.getState().user;
+    if (user) {
+      const statusMap: Record<string, string> = {
+        pending: '待处理',
+        in_progress: '进行中',
+        completed: '已完成',
+        cancelled: '已取消',
+      };
+      
+      get().addOperationLog({
+        operatorId: user.id,
+        operatorName: user.name,
+        operationType: 'stocktake_status_change',
+        targetType: 'stocktake',
+        targetId: plan.id,
+        targetName: plan.planNo,
+        fieldChanges: [
+          {
+            field: 'status',
+            fieldName: '状态',
+            oldValue: statusMap[plan.status] || plan.status,
+            newValue: '已完成',
+          },
+        ],
+        remark: `盘点计划完成，共${plan.items.length}项商品`,
+      });
+    }
 
     const newDifferenceItems = generateDifferenceItemsFromPlan({
       ...plan,
@@ -487,6 +661,25 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     const state = get();
     const order = state.stockAdjustmentOrders.find((o) => o.id === orderId);
     if (!order) return;
+
+    const user = useAuthStore.getState().user;
+    if (user) {
+      order.items.forEach((item) => {
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'inventory_adjust',
+          targetType: 'inventory',
+          targetId: item.id,
+          targetName: item.productName,
+          fieldChanges: [
+            { field: 'systemQuantity', fieldName: '系统数量', oldValue: item.systemQuantity, newValue: item.actualQuantity },
+            { field: 'adjustQuantity', fieldName: '调整数量', oldValue: null, newValue: item.adjustQuantity },
+          ],
+          remark: `库存调整: ${item.productSku} @ ${item.locationCode}，系统${item.systemQuantity} → 实际${item.actualQuantity}`,
+        });
+      });
+    }
 
     const newInventory = [...state.inventory];
     const newLocations = [...state.locations];
@@ -666,17 +859,72 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     return summary.filter((s) => s.stockStatus === 'overstock').length;
   },
 
-  addTransferOrder: (order) =>
+  addTransferOrder: (order) => {
+    if (order.operator) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'transfer_create',
+          targetType: 'transfer',
+          targetId: order.id,
+          targetName: order.orderNo,
+          fieldChanges: [
+            { field: 'sourceLocationCode', fieldName: '源库位', oldValue: null, newValue: order.sourceLocationCode },
+            { field: 'targetLocationCode', fieldName: '目标库位', oldValue: null, newValue: order.targetLocationCode },
+            { field: 'itemCount', fieldName: '商品项数', oldValue: null, newValue: order.items.length },
+          ],
+          remark: `创建调拨单，从 ${order.sourceLocationCode} 到 ${order.targetLocationCode}`,
+        });
+      }
+    }
+    
     set((state) => ({
       transferOrders: [...state.transferOrders, order],
-    })),
+    }));
+  },
 
-  updateTransferOrder: (id, order) =>
+  updateTransferOrder: (id, order) => {
+    const state = get();
+    const existingOrder = state.transferOrders.find((o) => o.id === id);
+    
+    if (order.status && existingOrder && order.status !== existingOrder.status) {
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const statusMap: Record<string, string> = {
+          pending: '待处理',
+          in_transit: '运输中',
+          completed: '已完成',
+          cancelled: '已取消',
+        };
+        
+        get().addOperationLog({
+          operatorId: user.id,
+          operatorName: user.name,
+          operationType: 'transfer_status_change',
+          targetType: 'transfer',
+          targetId: existingOrder.id,
+          targetName: existingOrder.orderNo,
+          fieldChanges: [
+            {
+              field: 'status',
+              fieldName: '状态',
+              oldValue: statusMap[existingOrder.status] || existingOrder.status,
+              newValue: statusMap[order.status] || order.status,
+            },
+          ],
+          remark: `调拨单状态从 ${statusMap[existingOrder.status]} 变更为 ${statusMap[order.status]}`,
+        });
+      }
+    }
+    
     set((state) => ({
       transferOrders: state.transferOrders.map((o) =>
         o.id === id ? { ...o, ...order, updateTime: new Date().toLocaleString() } : o
       ),
-    })),
+    }));
+  },
 
   startTransfer: (id) => {
     const state = get();
@@ -1984,5 +2232,104 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     }
 
     return null;
+  },
+
+  addOperationLog: (log) => {
+    const state = get();
+    const operator = state.suppliers.length > 0 
+      ? { id: log.operatorId, name: log.operatorName, role: 'operator' } 
+      : null;
+    
+    const operatorRole = operator?.role || 'operator';
+    
+    const roleMap: Record<string, string> = {
+      '1': 'admin',
+      '2': 'manager', 
+      '3': 'operator',
+    };
+    
+    const actualRole = roleMap[log.operatorId] || operatorRole;
+    const roleNameMap: Record<string, string> = {
+      admin: '管理员',
+      manager: '经理',
+      operator: '操作员',
+    };
+
+    const newLog: OperationLog = {
+      ...log,
+      id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      operateTime: new Date().toLocaleString(),
+      operatorRole: roleNameMap[actualRole] || actualRole,
+      operationTypeName: OperationLogTypeLabels[log.operationType],
+      ipAddress: '127.0.0.1',
+      userAgent: navigator?.userAgent || 'Unknown',
+    };
+
+    set((state) => ({
+      operationLogs: [newLog, ...state.operationLogs],
+    }));
+  },
+
+  getOperationLogs: (filter, currentUser) => {
+    const state = get();
+    let logs = [...state.operationLogs];
+
+    if (currentUser && currentUser.role !== 'admin') {
+      logs = logs.filter((log) => log.operatorId === currentUser.id);
+    }
+
+    if (filter) {
+      if (filter.startTime) {
+        const startDate = new Date(filter.startTime);
+        logs = logs.filter((log) => new Date(log.operateTime) >= startDate);
+      }
+      if (filter.endTime) {
+        const endDate = new Date(filter.endTime);
+        endDate.setHours(23, 59, 59, 999);
+        logs = logs.filter((log) => new Date(log.operateTime) <= endDate);
+      }
+      if (filter.operatorId) {
+        logs = logs.filter((log) => log.operatorId === filter.operatorId);
+      }
+      if (filter.operationType) {
+        logs = logs.filter((log) => log.operationType === filter.operationType);
+      }
+    }
+
+    return logs;
+  },
+
+  getOperationLogById: (id, currentUser) => {
+    const state = get();
+    const log = state.operationLogs.find((l) => l.id === id);
+    
+    if (!log) return null;
+    
+    if (currentUser && currentUser.role !== 'admin' && log.operatorId !== currentUser.id) {
+      return null;
+    }
+    
+    return log;
+  },
+
+  getOperationTypes: () => {
+    return Object.entries(OperationLogTypeLabels).map(([value, label]) => ({
+      value: value as OperationLogType,
+      label,
+    }));
+  },
+
+  getOperators: () => {
+    const state = get();
+    const operatorMap = new Map<string, string>();
+    
+    state.operationLogs.forEach((log) => {
+      operatorMap.set(log.operatorId, log.operatorName);
+    });
+    
+    return Array.from(operatorMap.entries()).map(([value, label]) => ({
+      value,
+      label,
+    }));
   },
 }));

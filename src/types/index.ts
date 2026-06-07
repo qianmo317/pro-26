@@ -706,3 +706,73 @@ export interface TaskStats {
     stocktake: number;
   };
 }
+
+export type OperationLogType =
+  | 'login'
+  | 'logout'
+  | 'inbound_create'
+  | 'inbound_status_change'
+  | 'outbound_create'
+  | 'outbound_status_change'
+  | 'inventory_adjust'
+  | 'stocktake_result_edit'
+  | 'transfer_create'
+  | 'transfer_status_change'
+  | 'stocktake_create'
+  | 'stocktake_status_change';
+
+export const OperationLogTypeLabels: Record<OperationLogType, string> = {
+  login: '用户登录',
+  logout: '用户登出',
+  inbound_create: '入库单创建',
+  inbound_status_change: '入库单状态变更',
+  outbound_create: '出库单创建',
+  outbound_status_change: '出库单状态变更',
+  inventory_adjust: '库存调整',
+  stocktake_result_edit: '盘点结果修改',
+  transfer_create: '调拨单创建',
+  transfer_status_change: '调拨单状态变更',
+  stocktake_create: '盘点计划创建',
+  stocktake_status_change: '盘点计划状态变更',
+};
+
+export interface OperationLogFieldChange {
+  field: string;
+  fieldName: string;
+  oldValue: string | number | boolean | null | undefined;
+  newValue: string | number | boolean | null | undefined;
+}
+
+export interface OperationLog {
+  id: string;
+  operatorId: string;
+  operatorName: string;
+  operatorRole: string;
+  operateTime: string;
+  operationType: OperationLogType;
+  operationTypeName: string;
+  targetType: string;
+  targetId: string;
+  targetName: string;
+  fieldChanges: OperationLogFieldChange[];
+  remark?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export interface OperationLogFilter {
+  startTime?: string;
+  endTime?: string;
+  operatorId?: string;
+  operationType?: OperationLogType;
+  targetType?: string;
+}
+
+export interface OperationLogState {
+  operationLogs: OperationLog[];
+  addOperationLog: (log: Omit<OperationLog, 'id' | 'operateTime' | 'operatorRole' | 'operationTypeName'>) => void;
+  getOperationLogs: (filter?: OperationLogFilter, currentUser?: User | null) => OperationLog[];
+  getOperationLogById: (id: string, currentUser?: User | null) => OperationLog | null;
+  getOperationTypes: () => { value: OperationLogType; label: string }[];
+  getOperators: () => { value: string; label: string }[];
+}

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthState } from '../types';
 import { mockUser, mockManager, mockOperator } from '../mock/data';
+import { useWarehouseStore } from './warehouseStore';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -28,11 +29,37 @@ export const useAuthStore = create<AuthState>()(
             token,
             isAuthenticated: true,
           });
+          
+          useWarehouseStore.getState().addOperationLog({
+            operatorId: user.id,
+            operatorName: user.name,
+            operationType: 'login',
+            targetType: 'user',
+            targetId: user.id,
+            targetName: user.name,
+            fieldChanges: [],
+            remark: '用户登录系统',
+          });
+          
           return true;
         }
         return false;
       },
       logout: () => {
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser) {
+          useWarehouseStore.getState().addOperationLog({
+            operatorId: currentUser.id,
+            operatorName: currentUser.name,
+            operationType: 'logout',
+            targetType: 'user',
+            targetId: currentUser.id,
+            targetName: currentUser.name,
+            fieldChanges: [],
+            remark: '用户退出系统',
+          });
+        }
+        
         set({
           user: null,
           token: null,

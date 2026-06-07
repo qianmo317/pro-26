@@ -1691,3 +1691,243 @@ export const generateDifferenceItemsFromPlan = (plan: StocktakePlan): StockDiffe
 
   return items;
 };
+
+import type { OperationLog, OperationLogType } from '../types';
+import { OperationLogTypeLabels } from '../types';
+
+const statusMap: Record<string, string> = {
+  pending: '待处理',
+  in_progress: '处理中',
+  completed: '已完成',
+  cancelled: '已取消',
+  pending_review: '待复核',
+  split: '已拆分',
+  draft: '草稿',
+  pending_confirm: '待确认',
+  confirmed: '已确认',
+  in_transit: '运输中',
+};
+
+const generateMockOperationLogs = (): OperationLog[] => {
+  const logs: OperationLog[] = [];
+  let logId = 1;
+  const now = new Date('2026-06-06T18:00:00');
+
+  const users = [mockUser, mockManager, mockOperator];
+
+  const addLog = (
+    operatorIndex: number,
+    operationType: OperationLogType,
+    targetType: string,
+    targetId: string,
+    targetName: string,
+    fieldChanges: OperationLog['fieldChanges'],
+    daysAgo: number,
+    hoursAgo: number,
+    remark?: string
+  ) => {
+    const opTime = new Date(now);
+    opTime.setDate(opTime.getDate() - daysAgo);
+    opTime.setHours(opTime.getHours() - hoursAgo);
+
+    const user = users[operatorIndex];
+    logs.push({
+      id: `LOG-${logId++}`,
+      operatorId: user.id,
+      operatorName: user.name,
+      operatorRole: user.role,
+      operateTime: opTime.toLocaleString(),
+      operationType,
+      operationTypeName: OperationLogTypeLabels[operationType],
+      targetType,
+      targetId,
+      targetName,
+      fieldChanges,
+      remark,
+      ipAddress: `192.168.1.${100 + operatorIndex}`,
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    });
+  };
+
+  addLog(0, 'login', 'user', '1', '系统管理员', [], 0, 10, '用户登录系统');
+  addLog(1, 'login', 'user', '2', '仓库经理', [], 0, 9, '用户登录系统');
+  addLog(2, 'login', 'user', '3', '仓库操作员', [], 0, 8, '用户登录系统');
+
+  mockInboundOrders.forEach((order, idx) => {
+    addLog(
+      idx % 3,
+      'inbound_create',
+      'inbound',
+      order.id,
+      order.orderNo,
+      [
+        { field: 'supplier', fieldName: '供应商', oldValue: null, newValue: order.supplier },
+        { field: 'status', fieldName: '状态', oldValue: null, newValue: statusMap[order.status] },
+      ],
+      idx + 1,
+      idx * 2,
+      `创建入库单，共${order.items.length}项商品`
+    );
+
+    if (order.status !== 'pending') {
+      addLog(
+        idx % 3,
+        'inbound_status_change',
+        'inbound',
+        order.id,
+        order.orderNo,
+        [
+          { field: 'status', fieldName: '状态', oldValue: statusMap['pending'], newValue: statusMap[order.status] },
+        ],
+        idx,
+        idx * 2 + 1,
+        `入库单状态变更`
+      );
+    }
+  });
+
+  mockOutboundOrders.forEach((order, idx) => {
+    addLog(
+      idx % 3,
+      'outbound_create',
+      'outbound',
+      order.id,
+      order.orderNo,
+      [
+        { field: 'customer', fieldName: '客户', oldValue: null, newValue: order.customer },
+        { field: 'status', fieldName: '状态', oldValue: null, newValue: statusMap[order.status] },
+      ],
+      idx + 2,
+      idx * 2,
+      `创建出库单，共${order.items.length}项商品`
+    );
+
+    if (order.status !== 'pending') {
+      addLog(
+        (idx + 1) % 3,
+        'outbound_status_change',
+        'outbound',
+        order.id,
+        order.orderNo,
+        [
+          { field: 'status', fieldName: '状态', oldValue: statusMap['pending'], newValue: statusMap[order.status] },
+        ],
+        idx + 1,
+        idx * 2 + 2,
+        `出库单状态变更`
+      );
+    }
+  });
+
+  mockStocktakePlans.forEach((plan, idx) => {
+    addLog(
+      idx % 3,
+      'stocktake_create',
+      'stocktake',
+      plan.id,
+      plan.planNo,
+      [
+        { field: 'name', fieldName: '盘点名称', oldValue: null, newValue: plan.name },
+        { field: 'type', fieldName: '盘点类型', oldValue: null, newValue: plan.type === 'full' ? '全盘' : plan.type === 'partial' ? '抽盘' : '周期盘点' },
+      ],
+      idx + 3,
+      idx * 3,
+      `创建盘点计划，共${plan.items.length}项商品`
+    );
+
+    if (plan.status === 'completed') {
+      addLog(
+        idx % 3,
+        'stocktake_status_change',
+        'stocktake',
+        plan.id,
+        plan.planNo,
+        [
+          { field: 'status', fieldName: '状态', oldValue: statusMap['pending'], newValue: statusMap[plan.status] },
+        ],
+        idx + 2,
+        idx * 3 + 1,
+        `盘点计划完成`
+      );
+    }
+
+    plan.items.filter((item) => item.diffQuantity !== 0).forEach((item, itemIdx) => {
+      addLog(
+        idx % 3,
+        'stocktake_result_edit',
+        'stocktake_item',
+        item.id,
+        item.productName,
+        [
+          { field: 'actualQuantity', fieldName: '实际数量', oldValue: 0, newValue: item.actualQuantity },
+          { field: 'systemQuantity', fieldName: '系统数量', oldValue: null, newValue: item.systemQuantity },
+          { field: 'diffQuantity', fieldName: '差异数量', oldValue: null, newValue: item.diffQuantity },
+        ],
+        idx + 2,
+        idx * 3 + itemIdx + 2,
+        `盘点结果录入: ${item.productSku}`
+      );
+    });
+  });
+
+  mockTransferOrders.forEach((order, idx) => {
+    addLog(
+      idx % 3,
+      'transfer_create',
+      'transfer',
+      order.id,
+      order.orderNo,
+      [
+        { field: 'sourceLocationCode', fieldName: '源库位', oldValue: null, newValue: order.sourceLocationCode },
+        { field: 'targetLocationCode', fieldName: '目标库位', oldValue: null, newValue: order.targetLocationCode },
+      ],
+      idx + 2,
+      idx * 2 + 4,
+      `创建调拨单，共${order.items.length}项商品`
+    );
+
+    if (order.status !== 'pending') {
+      addLog(
+        (idx + 2) % 3,
+        'transfer_status_change',
+        'transfer',
+        order.id,
+        order.orderNo,
+        [
+          { field: 'status', fieldName: '状态', oldValue: statusMap['pending'], newValue: statusMap[order.status] },
+        ],
+        idx + 1,
+        idx * 2 + 5,
+        `调拨单状态变更`
+      );
+    }
+  });
+
+  mockStockAdjustmentOrders.forEach((order, idx) => {
+    order.items.forEach((item, itemIdx) => {
+      addLog(
+        idx % 3,
+        'inventory_adjust',
+        'inventory',
+        item.id,
+        item.productName,
+        [
+          { field: 'systemQuantity', fieldName: '系统数量', oldValue: item.systemQuantity, newValue: item.actualQuantity },
+          { field: 'adjustQuantity', fieldName: '调整数量', oldValue: null, newValue: item.adjustQuantity },
+        ],
+        idx + 1,
+        idx * 2 + itemIdx + 3,
+        `库存调整: ${item.productSku} @ ${item.locationCode}`
+      );
+    });
+  });
+
+  addLog(0, 'logout', 'user', '1', '系统管理员', [], 0, 2, '用户退出系统');
+  addLog(1, 'logout', 'user', '2', '仓库经理', [], 0, 3, '用户退出系统');
+  addLog(2, 'logout', 'user', '3', '仓库操作员', [], 0, 1, '用户退出系统');
+
+  logs.sort((a, b) => new Date(b.operateTime).getTime() - new Date(a.operateTime).getTime());
+  return logs;
+};
+
+export const mockOperationLogs: OperationLog[] = generateMockOperationLogs();
